@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -267,7 +268,7 @@ InputDecoration decor(String label,IconData icon)=>InputDecoration(labelText:lab
 ButtonStyle filled()=>FilledButton.styleFrom(backgroundColor:orange,foregroundColor:Colors.white,shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(12)));
 void toast(BuildContext ctx,String s){if(ctx.mounted)ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content:Text(s)));}
 class DriverHome extends StatefulWidget{final Map<String,dynamic> user;final String lang;final Future<void>Function(Map<String,dynamic>) onUser;final Future<void>Function(String) onLanguage;final Future<void>Function() onLogout;const DriverHome({super.key,required this.user,required this.lang,required this.onUser,required this.onLanguage,required this.onLogout});@override State<DriverHome>createState()=>_DriverHomeState();}
-class _DriverHomeState extends State<DriverHome>{int tab=0;List tasks=[];List expenses=[];List<Map<String,dynamic>> notifications=[];Set<String> seenNotifications={};final Set<String> _notifiedThisSession={};String _scheduledSignature='';bool busy=false;bool trackingOnShift=false;bool _gpsStarting=false;String gpsSyncStatus="Waiting for GPS";StreamSubscription<Position>? gpsSub;Timer? poll;final picker=ImagePicker();String tr(String key)=>labels[widget.lang]?[key]??labels['en']![key]??key;
+class _DriverHomeState extends State<DriverHome>{int tab=0;List tasks=[];List expenses=[];List<Map<String,dynamic>> notifications=[];Set<String> seenNotifications={};final Set<String> _notifiedThisSession={};String _scheduledSignature='';bool busy=false;bool trackingOnShift=false;bool _gpsStarting=false;String gpsSyncStatus="Waiting for GPS";StreamSubscription<Position>? gpsSub;Timer? poll;Future<void> _gpsOperations=Future<void>.value();DateTime? lastGpsUploaded;final picker=ImagePicker();String tr(String key)=>labels[widget.lang]?[key]??labels['en']![key]??key;
  @override void initState(){super.initState();trackingOnShift=widget.user['on_shift']==true;restoreSeen();DriverNotifications.initialize();load();startPolling();if(trackingOnShift)startGps();}
  @override void dispose(){gpsSub?.cancel();poll?.cancel();super.dispose();}
  Future<void> restoreSeen()async{final prefs=await SharedPreferences.getInstance();seenNotifications=(prefs.getStringList('read_notifications')??[]).toSet();}
@@ -387,13 +388,13 @@ class _DriverHomeState extends State<DriverHome>{int tab=0;List tasks=[];List ex
  Future<void> load()async{try{final result=await Future.wait([api.call('/tasks'),api.call('/expenses'),api.call('/me'),api.call('/driver/notifications')]);if(mounted){setState((){tasks=result[0];expenses=result[1];notifications=List<Map<String,dynamic>>.from((result[3] as List).map((n)=>Map<String,dynamic>.from(n)));});await widget.onUser(Map<String,dynamic>.from(result[2]));
       if(!mounted)return;
       trackingOnShift=result[2]['on_shift']==true;
-      if(result[2]['on_shift']==true && gpsSub==null){await startGps();await flushGps();}
+      if(result[2]['on_shift']==true && gpsSub==null){await startGps();await syncPendingGps();}
       if(result[2]['on_shift']!=true && gpsSub!=null){await gpsSub?.cancel();gpsSub=null;}
       final signature='${result[2]['shift_expected']}|${result[2]['on_shift']}|${tasks.map((t)=>'${t['id']}:${t['status']}:${t['due_at']}').join('|')}';
       if(signature!=_scheduledSignature){_scheduledSignature=signature;DriverNotifications.syncShift('${result[2]['shift_expected']??'09:00'}',result[2]['on_shift']==true);DriverNotifications.syncTasks(tasks);}
       for(final n in notifications){final key='${n['id']}';if(!seenNotifications.contains(key)&&!_notifiedThisSession.contains(key)){_notifiedThisSession.add(key);if(n['type']=='task_assignment'||n['type']=='predicted_delay'||n['type']=='deadline_warning'||n['type']=='deadline_missed')DriverNotifications.show(key,'${n['title']??''}','${n['message']??''}');}}}}catch(e){if(mounted)toast(context,'Refresh failed: $e');}}
- void startPolling(){poll?.cancel();poll=Timer.periodic(const Duration(seconds:12),(_){load();});}
- Future<Position> location()async{if(!await Geolocator.isLocationServiceEnabled())throw Exception('Enable device location');var p=await Geolocator.checkPermission();if(p==LocationPermission.denied)p=await Geolocator.requestPermission();if(p==LocationPermission.denied||p==LocationPermission.deniedForever)throw Exception('Location permission required');return Geolocator.getCurrentPosition(desiredAccuracy:LocationAccuracy.high);}
+ void startPolling(){poll?.cancel();poll=Timer.periodic(const Duration(seconds:12),(_){if(!mounted)return;load();if(trackingOnShift){if(gpsSub==null)startGps();syncPendingGps();}});}
+ Future<Position> location()async{if(!await Geolocator.isLocationServiceEnabled())throw Exception('Enable device location');var p=await Geolocator.checkPermission();if(p==LocationPermission.denied)p=await Geolocator.requestPermission();if(p==LocationPermission.denied||p==LocationPermission.deniedForever)throw Exception('Location permission required');return Geolocator.getCurrentPosition(locationSettings:const LocationSettings(accuracy:LocationAccuracy.high,timeLimit:Duration(seconds:20)));}
  Future<void> startGps()async{
   if(!trackingOnShift||gpsSub!=null||_gpsStarting)return;
   _gpsStarting=true;
@@ -406,26 +407,54 @@ class _DriverHomeState extends State<DriverHome>{int tab=0;List tasks=[];List ex
     accuracy:LocationAccuracy.high,distanceFilter:10,intervalDuration:const Duration(seconds:10),
     foregroundNotificationConfig:const ForegroundNotificationConfig(
      notificationTitle:'KRIYA360 shift tracking',notificationText:'Location sharing is active while punched in.',enableWakeLock:true)
-   )).listen((p)async{
+   )).listen((p){
     if(!trackingOnShift)return;
-    try{
-     await api.call('/gps',method:'POST',json:{'lat':p.latitude,'lng':p.longitude,
-      'task_id':activeTask?['id'],'accuracy_m':p.accuracy,'speed_mps':p.speed<0?0:p.speed,
-      'captured_at':p.timestamp.toUtc().toIso8601String()});
-     if(mounted)setState(()=>gpsSyncStatus='GPS uploaded');
-     await flushGps();
-    }catch(_){
+    _gpsOperations=_gpsOperations.catchError((Object _){}).then((_)async{
      await queueGps(p);
-     if(mounted)setState(()=>gpsSyncStatus='Offline: GPS queued');
-    }
-   },onError:(Object error){gpsSub=null;if(mounted)setState(()=>gpsSyncStatus='GPS interrupted; retrying');},cancelOnError:true);
+     await flushGps();
+    }).catchError((Object error){
+     if(mounted)setState(()=>gpsSyncStatus='GPS saved locally; upload retry pending');
+    });
+   },onError:(Object error){gpsSub=null;if(mounted)setState(()=>gpsSyncStatus='GPS interrupted; reconnecting');},cancelOnError:true);
   }catch(e){if(mounted)setState(()=>gpsSyncStatus='GPS unavailable: $e');}
   finally{_gpsStarting=false;}
  }
  Map<String,dynamic>?get activeTask{for(final t in tasks){if(t['status']=='in_progress')return Map<String,dynamic>.from(t);}return null;}
- Future<void> queueGps(Position p)async{final prefs=await SharedPreferences.getInstance();final old=prefs.getStringList('pending_gps')??[];old.add(jsonEncode({'lat':p.latitude,'lng':p.longitude,'task_id':activeTask?['id'],'accuracy_m':p.accuracy,'speed_mps':p.speed<0?0:p.speed,'captured_at':p.timestamp.toUtc().toIso8601String()}));await prefs.setStringList('pending_gps',old.length>100?old.sublist(old.length-100):old);}
- Future<void> flushGps()async{final prefs=await SharedPreferences.getInstance();final old=prefs.getStringList('pending_gps')??[];final remaining=<String>[];for(final entry in old){try{await api.call('/gps',method:'POST',json:Map<String,dynamic>.from(jsonDecode(entry)));}catch(_){remaining.add(entry);}}await prefs.setStringList('pending_gps',remaining);}
- Future<void> punch()async{setState(()=>busy=true);try{final p=await location();final on=widget.user['on_shift']==true;final r=await api.call('/attendance/punch-${on?'out':'in'}',method:'POST',json:{'lat':p.latitude,'lng':p.longitude,'vehicle':widget.user['vehicle']??''});await widget.onUser(Map<String,dynamic>.from(r));trackingOnShift=!on;if(on){await gpsSub?.cancel();gpsSub=null;}else{await startGps();await flushGps();}await DriverNotifications.syncShift('${widget.user['shift_expected']??'09:00'}',!on);await load();if(mounted)toast(context,on?'Punched out successfully':'Punched in successfully');}catch(e){if(mounted)toast(context,'Punch failed: $e');}finally{if(mounted)setState(()=>busy=false);}}
+ Future<void> queueGps(Position p)async{
+  final prefs=await SharedPreferences.getInstance();
+  final old=prefs.getStringList('pending_gps')??<String>[];
+  final sampleId='${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1<<32)}';
+  old.add(jsonEncode({'sample_id':sampleId,'lat':p.latitude,'lng':p.longitude,
+   'task_id':activeTask?['id'],'accuracy_m':p.accuracy,'speed_mps':p.speed<0?0:p.speed,
+   'captured_at':p.timestamp.toUtc().toIso8601String()}));
+  await prefs.setStringList('pending_gps',old.length>500?old.sublist(old.length-500):old);
+  if(mounted)setState(()=>gpsSyncStatus='Location captured; syncing');
+ }
+ Future<void> syncPendingGps()async{
+  _gpsOperations=_gpsOperations.catchError((Object _){}).then((_)=>flushGps());
+  await _gpsOperations;
+ }
+ Future<void> flushGps()async{
+  if(!trackingOnShift)return;
+  final prefs=await SharedPreferences.getInstance();
+  final old=prefs.getStringList('pending_gps')??<String>[];
+  if(old.isEmpty)return;
+  final remaining=List<String>.from(old);
+  // Send in capture order and persist after each success so a restart never loses the queue.
+  for(final entry in old){
+   try{
+    await api.call('/gps',method:'POST',json:Map<String,dynamic>.from(jsonDecode(entry)));
+    remaining.removeAt(0);
+    await prefs.setStringList('pending_gps',remaining);
+    lastGpsUploaded=DateTime.now();
+    if(mounted)setState(()=>gpsSyncStatus='GPS uploaded ${lastGpsUploaded!.hour.toString().padLeft(2,'0')}:${lastGpsUploaded!.minute.toString().padLeft(2,'0')} · ${remaining.length} queued');
+   }catch(_){
+    if(mounted)setState(()=>gpsSyncStatus='GPS offline · ${remaining.length} queued for retry');
+    break;
+   }
+  }
+ }
+ Future<void> punch()async{setState(()=>busy=true);try{final p=await location();final on=widget.user['on_shift']==true;final r=await api.call('/attendance/punch-${on?'out':'in'}',method:'POST',json:{'lat':p.latitude,'lng':p.longitude,'vehicle':widget.user['vehicle']??''});await widget.onUser(Map<String,dynamic>.from(r));trackingOnShift=!on;if(on){await gpsSub?.cancel();gpsSub=null;if(mounted)setState(()=>gpsSyncStatus='Off shift · location sharing stopped');}else{await startGps();await syncPendingGps();}await DriverNotifications.syncShift('${widget.user['shift_expected']??'09:00'}',!on);await load();if(mounted)toast(context,on?'Punched out successfully':'Punched in successfully');}catch(e){if(mounted)toast(context,'Punch failed: $e');}finally{if(mounted)setState(()=>busy=false);}}
  Future<void> sos()async{final confirm=await showDialog<bool>(context:context,builder:(c)=>AlertDialog(icon:const Icon(Icons.sos,color:Colors.red,size:40),title:Text(tr('sos')),content:Text(tr('sosQuestion')),actions:[TextButton(onPressed:()=>Navigator.pop(c,false),child:Text(tr('cancel'))),FilledButton(style:FilledButton.styleFrom(backgroundColor:Colors.red),onPressed:()=>Navigator.pop(c,true),child:Text(tr('confirm')))]));if(confirm!=true)return;try{Position? p;try{p=await location();}catch(_){ }final r=await api.call('/sos',method:'POST',json:{'confirmed':true,'lat':p?.latitude,'lng':p?.longitude,'message':'Driver requested emergency assistance'});if(mounted)toast(context,r['status']=='received_by_server'?'SOS received by management server':'SOS status unknown');}catch(e){if(mounted)showDialog(context:context,builder:(c)=>AlertDialog(title:const Text('SOS not delivered'),content:Text('Management did not confirm receipt. Call emergency services if needed. $e'),actions:[TextButton(onPressed:()=>Navigator.pop(c),child:const Text('OK'))]));}}
  Future<void> startTask(Map t)async{try{await api.call('/tasks/${t['id']}/start',method:'POST');await load();}catch(e){if(mounted)toast(context,'Could not start: $e');}}
  Future<void> navigate(Map t)async{final uri=Uri.parse('https://www.google.com/maps/dir/?api=1&destination=${t['lat']},${t['lng']}&travelmode=driving');if(!await launchUrl(uri,mode:LaunchMode.externalApplication)&&mounted)toast(context,'Unable to open navigation');}

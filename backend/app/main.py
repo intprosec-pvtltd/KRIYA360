@@ -41,7 +41,7 @@ class Task(Base):
  late_reason=Column(Text,default=''); late_reason_at=Column(DateTime(timezone=True)); route_json=Column(Text,default=''); route_alternatives_json=Column(Text,default='[]'); route_distance_km=Column(Float,default=0); route_duration_min=Column(Float,default=0); route_source=Column(String,default=''); route_deviation=Column(Boolean,default=False)
 class GPS(Base):
  __tablename__='gps'
- id=Column(String,primary_key=True); driver_id=Column(String,ForeignKey('users.id')); task_id=Column(String); lat=Column(Float); lng=Column(Float); at=Column(DateTime(timezone=True)); accuracy_m=Column(Float); speed_mps=Column(Float); captured_at=Column(DateTime(timezone=True))
+ id=Column(String,primary_key=True); driver_id=Column(String,ForeignKey('users.id')); task_id=Column(String); lat=Column(Float); lng=Column(Float); at=Column(DateTime(timezone=True)); accuracy_m=Column(Float); speed_mps=Column(Float); captured_at=Column(DateTime(timezone=True)); sample_id=Column(String)
 class Expense(Base):
  __tablename__='expenses'
  id=Column(String,primary_key=True); driver_id=Column(String,ForeignKey('users.id')); task_id=Column(String,ForeignKey('tasks.id')); category=Column(String); amount=Column(Float); note=Column(Text,default=''); receipt_path=Column(String,default=''); evidence_sha=Column(String,default=''); evidence_visual=Column(String,default=''); fraud_flags=Column(Text,default='[]'); evidence_reviewed=Column(Boolean,default=False); reviewed_at=Column(DateTime(timezone=True)); status=Column(String,default='pending'); created_at=Column(DateTime(timezone=True))
@@ -58,7 +58,7 @@ with engine.begin() as connection:
  for table, additions in {
   'users': {'email':'VARCHAR','password_hash':'VARCHAR','pin_change_required':'BOOLEAN DEFAULT 0','shift_end_expected':"VARCHAR DEFAULT '18:00'",'license_path':'VARCHAR','license_verified':'BOOLEAN DEFAULT 0','license_review_note':"VARCHAR DEFAULT ''",'license_inspected_at':'DATETIME','license_inspected_by':"VARCHAR DEFAULT ''",'active':'BOOLEAN DEFAULT 1','face_review_status':"VARCHAR DEFAULT 'not_submitted'",'face_review_note':"VARCHAR DEFAULT ''"},
   'tasks': {'route_alternatives_json':"TEXT DEFAULT '[]'",'late_reason':"TEXT DEFAULT ''",'late_reason_at':'DATETIME','otp_attempts':'INTEGER DEFAULT 0'},
-  'gps': {'accuracy_m':'FLOAT','speed_mps':'FLOAT','captured_at':'TIMESTAMP'},
+  'gps': {'accuracy_m':'FLOAT','speed_mps':'FLOAT','captured_at':'TIMESTAMP','sample_id':'VARCHAR'},
   'expenses': {'evidence_sha':'VARCHAR','evidence_visual':'VARCHAR','fraud_flags':"TEXT DEFAULT '[]'",'evidence_reviewed':'BOOLEAN DEFAULT 0','reviewed_at':'DATETIME'}
  }.items():
   existing={c['name'] for c in inspect(connection).get_columns(table)}
@@ -225,6 +225,7 @@ class Coords(BaseModel):
  accuracy_m:Optional[float]=Field(default=None,ge=0,le=10000)
  speed_mps:Optional[float]=Field(default=None,ge=0,le=150)
  captured_at:Optional[datetime]=None
+ sample_id:Optional[str]=Field(default=None,min_length=8,max_length=100)
 class Punch(Coords):vehicle:str=''
 class ExpenseCreate(BaseModel):task_id:str;category:str;amount:float=Field(gt=0);note:str=''
 class SOSCreate(BaseModel):confirmed:bool;lat:Optional[float]=None;lng:Optional[float]=None;message:str='Emergency assistance requested'
@@ -486,41 +487,69 @@ def gps(x:Coords,u=Depends(driver),s:Session=Depends(db)):
  recorded=now()
  if x.captured_at is not None:
   captured=x.captured_at if x.captured_at.tzinfo else x.captured_at.replace(tzinfo=timezone.utc)
+  captured=captured.astimezone(timezone.utc)
   if captured>recorded+timedelta(minutes=2) or captured<recorded-timedelta(days=7):err(422,'GPS capture time outside accepted range')
  else:captured=recorded
- # Don't let delayed offline records move the driver's live marker backwards in time.
- if not u.last_gps or naive(captured)>=naive(u.last_gps):
+ # Samples from a previous shift are not allowed to rewrite a current journey.
+ if u.shift_start and naive(captured)<naive(u.shift_start)-timedelta(seconds=30):err(409,'GPS sample belongs to a previous shift')
+ if x.sample_id:
+  prior=s.scalar(select(GPS.id).where(GPS.driver_id==u.id,GPS.sample_id==x.sample_id))
+  if prior:return {'ok':True,'duplicate':True,'time':iso(u.last_gps),'server_time':iso(recorded),'deviation_alerts':[]}
+ # An inaccurate or delayed sample may be kept for diagnosis, but cannot shift the live position.
+ high_quality=x.accuracy_m is None or x.accuracy_m<=120
+ newer=not u.last_gps or naive(captured)>naive(u.last_gps)
+ if newer and high_quality:
   u.lat=x.lat;u.lng=x.lng;u.last_gps=captured
- s.add(GPS(id=str(uuid.uuid4()),driver_id=u.id,task_id=x.task_id,lat=x.lat,lng=x.lng,at=recorded,accuracy_m=x.accuracy_m,speed_mps=x.speed_mps,captured_at=captured))
+ s.add(GPS(id=str(uuid.uuid4()),sample_id=x.sample_id,driver_id=u.id,task_id=x.task_id,lat=x.lat,lng=x.lng,at=recorded,accuracy_m=x.accuracy_m,speed_mps=x.speed_mps,captured_at=captured))
  deviations=[]
- # Ignore GPS readings with poor accuracy and replayed samples for live deviation decisions.
- fresh=(recorded-captured).total_seconds()<90
+ fresh=(recorded-captured).total_seconds()<90 and (recorded-captured).total_seconds()>-20
  accurate=x.accuracy_m is not None and x.accuracy_m<=60
- for t in s.scalars(select(Task).where(Task.driver_id==u.id,Task.status=='in_progress')):
-  if not t.route_json or not (t.route_source or '').startswith(('OSRM','TomTom')):continue
-  try:
-   permitted=[json.loads(t.route_json)]+json.loads(t.route_alternatives_json or '[]')
-   distance_m=1000*min(line_distance_km(x.lat,x.lng,path) for path in permitted if len(path)>1)
-  except (ValueError,TypeError):continue
-  key=(u.id,t.id)
-  if not fresh or not accurate:continue
-  if distance_m>DEVIATION_METRES:
-   _deviation_samples[key]=_deviation_samples.get(key,0)+1
-   if _deviation_samples[key]>=DEVIATION_CONFIRMATIONS and not t.route_deviation:
-    t.route_deviation=True
-    new_alert(s,'route_deviation',u.id,f'{u.name} deviated {distance_m:.0f} m from the saved route (confirmed GPS)',t.id,lat=x.lat,lng=x.lng)
-    deviations.append(t.id)
-  else:
-   _deviation_samples.pop(key,None)
-   if t.route_deviation:
-    t.route_deviation=False
-    new_alert(s,'route_restored',u.id,f'{u.name} returned to the saved route',t.id,lat=x.lat,lng=x.lng)
+ if fresh and accurate and newer:
+  for t in s.scalars(select(Task).where(Task.driver_id==u.id,Task.status=='in_progress')):
+   if not t.route_json or not (t.route_source or '').startswith(('OSRM','TomTom')):continue
+   try:
+    permitted=[json.loads(t.route_json)]+json.loads(t.route_alternatives_json or '[]')
+    distance_m=1000*min(line_distance_km(x.lat,x.lng,path) for path in permitted if len(path)>1)
+   except (ValueError,TypeError):continue
+   key=(u.id,t.id)
+   if distance_m>DEVIATION_METRES:
+    _deviation_samples[key]=_deviation_samples.get(key,0)+1
+    if _deviation_samples[key]>=DEVIATION_CONFIRMATIONS and not t.route_deviation:
+     t.route_deviation=True
+     new_alert(s,'route_deviation',u.id,f'{u.name} deviated {distance_m:.0f} m from the saved route (confirmed GPS)',t.id,lat=x.lat,lng=x.lng)
+     deviations.append(t.id)
+   else:
+    _deviation_samples.pop(key,None)
+    if t.route_deviation:
+     t.route_deviation=False
+     new_alert(s,'route_restored',u.id,f'{u.name} returned to the saved route',t.id,lat=x.lat,lng=x.lng)
  s.commit()
- return {'ok':True,'time':iso(u.last_gps),'server_time':iso(recorded),'deviation_alerts':deviations}
+ return {'ok':True,'duplicate':False,'time':iso(u.last_gps),'server_time':iso(recorded),'deviation_alerts':deviations}
+
+@app.get('/api/tracking/status')
+def driver_tracking_status(u=Depends(driver),s:Session=Depends(db)):
+ age=(now()-u.last_gps.replace(tzinfo=timezone.utc) if u.last_gps and not u.last_gps.tzinfo else now()-u.last_gps) if u.last_gps else None
+ active=bool(u.shift_start and (not u.shift_end or naive(u.shift_start)>naive(u.shift_end)))
+ return {'driver_id':u.id,'on_shift':active,'last_gps':iso(u.last_gps),'gps_age_seconds':round(age.total_seconds()) if age else None,'gps_status':'no_gps' if age is None else 'fresh' if age.total_seconds()<=30 else 'stale' if age.total_seconds()<=120 else 'offline','server_time':iso(now())}
+
+@app.get('/api/tracking/fleet')
+def fleet_tracking(s:Session=Depends(db),_=Depends(manager)):
+ current=now()
+ drivers=list(s.scalars(select(User).where(User.role=='driver',User.active==True)))
+ # In-progress tasks only, never historical jobs; each driver is identified by their own ID.
+ active_tasks={t.driver_id:t for t in s.scalars(select(Task).where(Task.status=='in_progress').order_by(Task.started_at.desc()))}
+ result=[]
+ for u in drivers:
+  age=(current-(u.last_gps.replace(tzinfo=timezone.utc) if not u.last_gps.tzinfo else u.last_gps)).total_seconds() if u.last_gps else None
+  photo_ok=bool(u.face_path and u.face_review_status=='approved')
+  task=active_tasks.get(u.id)
+  result.append({'driver_id':u.id,'name':u.name,'vehicle':u.vehicle,'on_shift':bool(u.shift_start and (not u.shift_end or naive(u.shift_start)>naive(u.shift_end))), 'lat':u.lat,'lng':u.lng,'last_gps':iso(u.last_gps),'gps_age_seconds':round(age) if age is not None else None,'gps_status':'no_gps' if age is None or u.lat is None or u.lng is None else 'fresh' if 0<=age<=30 else 'stale' if age<=120 else 'offline', 'approved_photo_url':('/api/files/'+Path(u.face_path).name) if photo_ok else None,'current_task':task_json(task,s) if task else None})
+ return {'server_time':iso(current),'drivers':result}
 
 @app.get('/api/gps/{driver_id}')
 def gps_history(driver_id:str,s:Session=Depends(db),_=Depends(manager)):
- return [{'lat':p.lat,'lng':p.lng,'at':iso(p.captured_at or p.at),'received_at':iso(p.at),'accuracy_m':p.accuracy_m,'speed_mps':p.speed_mps,'task_id':p.task_id} for p in s.scalars(select(GPS).where(GPS.driver_id==driver_id).order_by(GPS.at.desc()).limit(300))]
+ records=list(s.scalars(select(GPS).where(GPS.driver_id==driver_id).order_by(GPS.captured_at.desc(),GPS.at.desc()).limit(300)))
+ return [{'lat':p.lat,'lng':p.lng,'at':iso(p.captured_at or p.at),'received_at':iso(p.at),'accuracy_m':p.accuracy_m,'speed_mps':p.speed_mps,'task_id':p.task_id} for p in records]
 
 def recipient_phone(value):
  digits=re.sub(r'[^0-9]','',value or '')
