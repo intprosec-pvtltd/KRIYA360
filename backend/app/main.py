@@ -51,6 +51,23 @@ class Alert(Base):
 class Attendance(Base):
  __tablename__='attendance'
  id=Column(String,primary_key=True); driver_id=Column(String); kind=Column(String); at=Column(DateTime(timezone=True)); lat=Column(Float); lng=Column(Float); vehicle=Column(String,default='')
+class OfficeGeofence(Base):
+ """Single authoritative office attendance location, managed from the dashboard."""
+ __tablename__='office_geofence'
+ id=Column(String,primary_key=True)
+ lat=Column(Float,nullable=False); lng=Column(Float,nullable=False)
+ radius_m=Column(Float,nullable=False,default=150)
+ max_accuracy_m=Column(Float,nullable=False,default=75)
+ enabled=Column(Boolean,nullable=False,default=False)
+ updated_at=Column(DateTime(timezone=True)); updated_by=Column(String)
+class OfficeGeofenceChange(Base):
+ __tablename__='office_geofence_changes'
+ id=Column(String,primary_key=True)
+ updated_at=Column(DateTime(timezone=True),nullable=False)
+ updated_by=Column(String,nullable=False)
+ lat=Column(Float,nullable=False); lng=Column(Float,nullable=False)
+ radius_m=Column(Float,nullable=False); max_accuracy_m=Column(Float,nullable=False)
+ enabled=Column(Boolean,nullable=False)
 Base.metadata.create_all(engine)
 # Non-destructive additive migration for databases created by earlier KRIYA360 versions.
 # Back up the SQLite file before deployment; no existing rows are removed.
@@ -227,6 +244,12 @@ class Coords(BaseModel):
  captured_at:Optional[datetime]=None
  sample_id:Optional[str]=Field(default=None,min_length=8,max_length=100)
 class Punch(Coords):vehicle:str=''
+class OfficeGeofenceUpdate(BaseModel):
+ lat:float=Field(ge=-90,le=90)
+ lng:float=Field(ge=-180,le=180)
+ radius_m:float=Field(ge=30,le=2000)
+ max_accuracy_m:float=Field(ge=5,le=500)
+ enabled:bool=False
 class ExpenseCreate(BaseModel):task_id:str;category:str;amount:float=Field(gt=0);note:str=''
 class SOSCreate(BaseModel):confirmed:bool;lat:Optional[float]=None;lng:Optional[float]=None;message:str='Emergency assistance requested'
 class StatusUpdate(BaseModel):status:str
@@ -401,27 +424,61 @@ def review_face_photo(uid:str,x:FaceReview,s:Session=Depends(db),_=Depends(manag
  u.face_review_note=x.review_note.strip() or ('Manager visually reviewed uploaded face photograph' if x.approved else 'Rejected: retake and submit a clear face photograph')
  s.commit()
  return safe_user(u)
-# Office-only attendance: disabled until an operator sets actual office coordinates.
-# Enabled mode fails closed if configuration is incomplete or inaccurate.
-def office_attendance_policy():
+# Database-managed office geofence. A saved setting overrides the legacy environment
+# variables. Legacy environment values remain a fallback until a manager saves a DB setting.
+# A missing or invalid enabled configuration MUST fail closed, never allow punches.
+def office_attendance_policy(s:Optional[Session]=None):
+ if s is None:
+  with SessionLocal() as session:
+   return office_attendance_policy(session)
+ saved=s.get(OfficeGeofence,'primary')
+ if saved:
+  return {'enabled':bool(saved.enabled),'configured':True,'source':'database',
+          'lat':saved.lat,'lng':saved.lng,'radius_m':saved.radius_m,
+          'max_accuracy_m':saved.max_accuracy_m,'updated_at':iso(saved.updated_at),
+          'updated_by':saved.updated_by}
  enabled=os.getenv('OFFICE_GEOFENCE_ENABLED','false').strip().lower() in ('true','1','yes','on')
  if not enabled:return {'enabled':False}
  try:
   lat=float(os.environ['OFFICE_LATITUDE']);lng=float(os.environ['OFFICE_LONGITUDE'])
   radius=float(os.getenv('OFFICE_RADIUS_METERS','150'))
   max_accuracy=float(os.getenv('OFFICE_MAX_GPS_ACCURACY_METERS','75'))
-  if not (-90<=lat<=90 and -180<=lng<=180 and 30<=radius<=2000 and 5<=max_accuracy<=500):raise ValueError('out of bounds')
+  if not all(math.isfinite(v) for v in (lat,lng,radius,max_accuracy)) or not (-90<=lat<=90 and -180<=lng<=180 and 30<=radius<=2000 and 5<=max_accuracy<=500):raise ValueError('out of bounds')
  except (KeyError,ValueError,OverflowError):
   err(503,'Office attendance policy is not configured correctly; contact management')
- return {'enabled':True,'lat':lat,'lng':lng,'radius_m':radius,'max_accuracy_m':max_accuracy}
+ return {'enabled':True,'configured':True,'source':'legacy_environment','lat':lat,
+         'lng':lng,'radius_m':radius,'max_accuracy_m':max_accuracy}
+
+def _validate_office_settings(x:OfficeGeofenceUpdate):
+ if not all(math.isfinite(v) for v in (x.lat,x.lng,x.radius_m,x.max_accuracy_m)):
+  err(422,'Office latitude, longitude, radius and GPS accuracy must be finite numbers')
+
+@app.get('/api/management/office-geofence')
+def get_office_geofence(s:Session=Depends(db),_=Depends(manager)):
+ return office_attendance_policy(s)
+
+@app.put('/api/management/office-geofence')
+def set_office_geofence(x:OfficeGeofenceUpdate,s:Session=Depends(db),u=Depends(manager)):
+ _validate_office_settings(x)
+ row=s.get(OfficeGeofence,'primary')
+ if row is None:
+  row=OfficeGeofence(id='primary');s.add(row)
+ row.lat=x.lat;row.lng=x.lng;row.radius_m=x.radius_m
+ row.max_accuracy_m=x.max_accuracy_m;row.enabled=x.enabled
+ row.updated_at=now();row.updated_by=u.id
+ s.add(OfficeGeofenceChange(id=str(uuid.uuid4()),updated_at=row.updated_at,
+                            updated_by=u.id,lat=x.lat,lng=x.lng,
+                            radius_m=x.radius_m,max_accuracy_m=x.max_accuracy_m,enabled=x.enabled))
+ s.commit()
+ return office_attendance_policy(s)
 
 def office_distance_m(lat1,lng1,lat2,lng2):
  radius=6371008.8
  a=math.sin(math.radians(lat2-lat1)/2)**2+math.cos(math.radians(lat1))*math.cos(math.radians(lat2))*math.sin(math.radians(lng2-lng1)/2)**2
  return 2*radius*math.asin(min(1.0,math.sqrt(a)))
 
-def enforce_office_punch(x):
- policy=office_attendance_policy()
+def enforce_office_punch(x,s:Optional[Session]=None):
+ policy=office_attendance_policy(s)
  if not policy['enabled']:return
  if x.accuracy_m is None or not math.isfinite(x.accuracy_m) or x.accuracy_m>policy['max_accuracy_m']:
   err(422,'A precise GPS fix is required for office attendance. Move outdoors and retry')
@@ -432,19 +489,19 @@ def enforce_office_punch(x):
   err(403,f'Punch allowed only within {round(policy["radius_m"])} m of the office. Current GPS is outside the permitted area (approximately {round(distance)} m from office)')
 
 @app.get('/api/attendance/office-policy')
-def attendance_office_policy(_=Depends(driver)):
- policy=office_attendance_policy()
+def attendance_office_policy(s:Session=Depends(db),_=Depends(driver)):
+ policy=office_attendance_policy(s)
  return {'enabled':policy['enabled'],'radius_m':policy.get('radius_m'),'max_accuracy_m':policy.get('max_accuracy_m')}
 
 @app.post('/api/attendance/punch-in')
 def punch_in(x:Punch,u=Depends(driver),s:Session=Depends(db)):
- enforce_office_punch(x)
+ enforce_office_punch(x,s)
  if u.shift_start and (not u.shift_end or naive(u.shift_start)>naive(u.shift_end)):err(409,'Already punched in')
  u.shift_start=now();u.shift_end=None;u.lat=x.lat;u.lng=x.lng;u.last_gps=now();u.last_gps_received_at=now();u.last_vehicle=x.vehicle or u.vehicle
  s.add(Attendance(id=str(uuid.uuid4()),driver_id=u.id,kind='in',at=now(),lat=x.lat,lng=x.lng,vehicle=u.last_vehicle));s.commit();return safe_user(u)
 @app.post('/api/attendance/punch-out')
 def punch_out(x:Punch,u=Depends(driver),s:Session=Depends(db)):
- enforce_office_punch(x)
+ enforce_office_punch(x,s)
  if not u.shift_start or (u.shift_end and naive(u.shift_end)>naive(u.shift_start)):err(409,'Not punched in')
  u.shift_end=now();u.lat=x.lat;u.lng=x.lng;u.last_gps=now();u.last_gps_received_at=now();s.add(Attendance(id=str(uuid.uuid4()),driver_id=u.id,kind='out',at=now(),lat=x.lat,lng=x.lng,vehicle=x.vehicle or u.last_vehicle));s.commit();return safe_user(u)
 @app.get('/api/attendance')
