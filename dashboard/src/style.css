@@ -1,0 +1,269 @@
+:root{font-family:'DM Sans',system-ui,sans-serif;color:#142541;background:#f4f7fc;font-synthesis:none}*{box-sizing:border-box}body{margin:0}button,input,select{font:inherit}button{cursor:pointer}a{text-decoration:none;color:#116ad5}.shell{display:flex;min-height:100vh}.sidebar{width:255px;position:fixed;inset:0 auto 0 0;background:#081e42;color:white;display:flex;flex-direction:column;padding:24px 14px;z-index:30}.brand{width:205px;height:84px;object-fit:contain;margin:0 auto 5px}.workspace{border:1px solid #26476c;background:#0c2a55;padding:12px;border-radius:10px;color:#b9d2ed;font-size:10px;font-weight:800;letter-spacing:1px;margin:0 7px 29px}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}.green.dot{background:#31ca87;box-shadow:0 0 0 4px #31ca8720}.nav-heading{font-size:10px;color:#6d91be;font-weight:800;letter-spacing:1.7px;margin:0 16px 12px}.sidebar nav{display:flex;flex-direction:column;gap:5px}.navitem{border:0;background:transparent;color:#a8bdd8;display:flex;align-items:center;gap:13px;width:100%;padding:13px 15px;border-radius:11px;font-size:13px;font-weight:700;text-align:left}.navitem:hover{background:#18365d;color:#fff}.navitem.active{background:linear-gradient(90deg,#f36d1a,#ff9532);color:#fff;box-shadow:0 6px 17px #0002}.navitem em{margin-left:auto;font-style:normal;border-radius:50%;background:#f24a53;color:white;font-size:10px;padding:3px 6px}.side-bottom{margin-top:auto;border-top:1px solid #254366;padding-top:19px;display:flex;align-items:center;gap:11px}.manager-avatar,.avatar{background:#ff8b2f;color:#fff;border-radius:11px;font-size:12px;font-weight:800;padding:12px}.side-bottom b{font-size:12px}.side-bottom small{display:block;font-size:10px;color:#91afcd;margin-top:2px}.side-bottom .icon-btn{margin-left:auto;color:#c8dcf1}.content{margin-left:255px;flex:1;min-width:0}.topbar{height:76px;background:white;border-bottom:1px solid #e7edf5;display:flex;align-items:center;justify-content:space-between;padding:0 33px}.breadcrumbs{font-size:13px;color:#94a3b6}.breadcrumbs span{margin:0 9px}.breadcrumbs b{color:#1b345a}.top-right{display:flex;align-items:center;gap:17px}.live-pill{font-size:11px;font-weight:800;color:#188863;background:#ecfaf4;padding:10px;border-radius:8px}.icon-btn{border:0;background:transparent;display:inline-flex;align-items:center;justify-content:center;color:#7486a0;position:relative}.notify i{position:absolute;width:7px;height:7px;background:#fa6348;border-radius:50%;top:-3px;right:-3px}.main-inner{max-width:1750px;margin:auto;padding:31px 33px 65px}.page-heading{display:flex;justify-content:space-between;align-items:end;margin-bottom:26px;gap:18px}.eyebrow{font-size:10px;color:#e87326;font-weight:800;letter-spacing:2px}.page-heading h1{font-size:29px;letter-spacing:-1px;margin:7px 0 4px;color:#132c51}.page-heading p{color:#8291a4;margin:0;font-size:13px}.heading-actions{display:flex;align-items:center;gap:12px}.date-chip{background:white;border:1px solid #e5ecf3;padding:11px 13px;display:flex;align-items:center;gap:8px;border-radius:9px;color:#64758d;font-size:12px}.btn{border:0;border-radius:9px;padding:12px 17px;font-weight:800;font-size:12px;display:inline-flex;align-items:center;justify-content:center;gap:9px;white-space:nowrap}.btn.primary{background:#f47b24;color:#fff;box-shadow:0 4px 15px #f47b2425}.btn.primary:hover{background:#d9610d}.btn.secondary{background:#eff3f8;color:#345}.stats-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:17px;margin-bottom:20px}.stat{background:white;border:1px solid #e8edf4;border-radius:13px;padding:22px;display:flex;gap:15px;align-items:center;box-shadow:0 3px 13px #0c2b4907}.stat-icon{width:52px;height:52px;border-radius:13px;display:grid;place-items:center}.stat-icon.blue{background:#eaf3ff;color:#1b6ec9}.stat-icon.orange{background:#fff1e7;color:#ed7b28}.stat-icon.red{background:#fff0f0;color:#de5e63}.stat-icon.green{background:#e9f8f1;color:#22976c}.stat p{margin:0 0 4px;color:#7c90a8;font-size:12px}.stat strong{font-size:26px;line-height:1.2;color:#142c4e}.stat small{display:block;font-size:10px;color:#a0adc0;margin-top:5px}.cols-two{display:grid;grid-template-columns:1.65fr 1fr;gap:18px}.cols-two.lower{margin-top:18px;grid-template-columns:1.55fr 1fr}.cols-two.tracking{grid-template-columns:1.65fr 1fr}.card{background:#fff;border:1px solid #e6edf5;border-radius:13px;padding:20px;overflow:hidden;box-shadow:0 4px 16px #09274706}.card-heading{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:19px}.card-heading h3{font-size:15px;margin:0 0 5px}.card-heading p{font-size:11px;color:#98a4b5;margin:0}.text-button{display:flex;align-items:center;gap:7px;border:0;background:none;color:#db762d;font-size:11px;font-weight:800}.tag{display:inline-flex;gap:4px;align-items:center;border-radius:6px;font-size:10px;font-weight:800;padding:6px 9px;white-space:nowrap}.tag.blue{background:#e8f1ff;color:#2c77c9}.tag.green{background:#e3f8ef;color:#239968}.tag.orange{background:#fff0de;color:#c87b27}.tag.red{background:#ffebed;color:#cf4a55}.tag.gray{background:#eef2f6;color:#8692a1}.map-shell{border-radius:11px;overflow:hidden;position:relative;background:#e6ecf4}.map-float{position:absolute;bottom:15px;left:14px;z-index:401;padding:11px 13px;background:#fff;border-radius:8px;box-shadow:0 3px 12px #0002;font-size:10px;font-weight:800;color:#4c617d}.alert-list{height:368px;overflow:auto}.alert-card{display:flex;gap:12px;padding:14px 0;border-bottom:1px solid #f0f3f7}.alert-icon{width:37px;height:37px;border-radius:9px;display:grid;place-items:center;flex-shrink:0}.alert-icon.red{background:#ffebed;color:#db4a56}.alert-icon.orange{background:#fff3e4;color:#e38b26}.alert-card b{font-size:12px}.alert-card p{color:#77889d;font-size:11px;line-height:1.5;margin:5px 0}.alert-card small,.driver-line small{color:#a2b0bd;font-size:10px}.view-all{width:100%;margin-top:12px;padding:13px;border:1px solid #edf0f4;background:#f9fbfe;border-radius:9px;color:#285c98;display:flex;justify-content:center;align-items:center;gap:7px;font-size:11px;font-weight:800}.driver-line{display:flex;gap:11px;align-items:center;padding:11px 0;border-bottom:1px solid #f0f3f7}.driver-line .tag{margin-left:auto}.driver-initial{background:#e8f1fc;color:#2c6eaa;border-radius:10px;min-width:39px;height:39px;display:grid;place-items:center;font-size:12px;font-weight:800}.driver-line b,.track-row b{font-size:12px}.driver-line small,.track-row small{display:block;margin-top:3px}.table-wrap{overflow:auto}table{border-collapse:collapse;width:100%;text-align:left;font-size:12px;min-width:750px}th{color:#94a2b5;font-size:10px;text-transform:uppercase;letter-spacing:.7px;padding:13px 11px;border-bottom:1px solid #e8eef5;background:#f9fbfe}td{padding:16px 11px;border-bottom:1px solid #edf1f6;color:#536781;vertical-align:middle}td b{color:#263c57}td small{display:block;font-size:10px;color:#a1aec0;margin-top:4px;max-width:170px}td.dest{max-width:160px}td.dest svg{vertical-align:middle;color:#f47b24;margin-right:4px}.small-btn{border:1px solid #d4e6f8;background:#eaf4ff;border-radius:7px;padding:8px 10px;color:#2369ad;font-size:11px;font-weight:800;display:inline-flex;align-items:center;gap:5px}.small-btn.muted{background:#f6f8fa;color:#77889c;border-color:#e6eaf0}.row-actions{display:flex;gap:7px;flex-wrap:wrap}.empty{display:grid;place-items:center;gap:5px;color:#a7b4c4;padding:45px;text-align:center;font-size:12px}.track-row{display:flex;align-items:center;gap:12px;border-bottom:1px solid #edf1f6;padding:17px 0}.track-row .tag{margin-left:auto}.progressrow{display:flex;align-items:center;gap:9px}.bar{height:6px;background:#eaf1f9;width:85px;border-radius:9px;overflow:hidden}.bar i{display:block;height:100%;background:#22ad82}.alert-full{display:flex;flex-direction:column}.full-alert{display:flex;align-items:center;gap:18px;padding:20px;border:1px solid #eef2f7;border-radius:10px;margin-bottom:12px}.full-alert.critical{border-color:#ffd7da;background:#fffafa}.alert-info{flex:1}.alert-info b{font-size:13px;margin-right:7px}.alert-info p{font-size:12px;color:#60748d}.alert-info small{font-size:11px;color:#9ca9b9}.alert-info a{display:flex;align-items:center;gap:4px;font-size:11px;margin-top:7px}.toast{position:fixed;right:20px;bottom:20px;max-width:420px;background:#0a2346;color:#fff;display:flex;gap:20px;align-items:center;padding:17px 20px;border-radius:12px;z-index:200;font-size:12px;box-shadow:0 12px 30px #0004}.toast button{border:0;background:transparent;color:#fff}.modal-backdrop{position:fixed;inset:0;background:#061a35aa;z-index:100;display:grid;place-items:center;padding:20px}.modal{background:#fff;border-radius:16px;width:min(780px,100%);max-height:90vh;overflow:auto;padding:26px}.modal-heading{display:flex;justify-content:space-between;align-items:start;margin-bottom:22px}.modal-heading h2{margin:5px 0}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.modal label,.login-form label{font-size:11px;font-weight:800;color:#63758c;display:flex;flex-direction:column;gap:7px}.modal input,.modal select,.login-form input{width:100%;border:1px solid #dce4ef;padding:12px;border-radius:8px;outline:0;color:#193354;background:#fff}.modal input:focus,.login-form input:focus{border-color:#f47b24}.modal-footer{display:flex;justify-content:flex-end;gap:11px;margin-top:23px}.suggestion-list{background:#f4f8fc;border-radius:9px;padding:8px;margin-top:8px}.suggestion-list button{display:block;width:100%;text-align:left;padding:10px;border:0;border-bottom:1px solid #dde5f0;background:none}.login-wrap{min-height:100vh;display:grid;grid-template-columns:1.2fr 1fr}.login-panel{padding:8vh 9%;background:radial-gradient(circle at 10% 10%,#134a88,#071b3c 66%);color:white}.login-logo{max-width:370px;width:85%;height:150px;object-fit:contain;object-position:left}.login-panel .eyebrow{margin-top:12vh}.login-panel h1{font-size:clamp(32px,4vw,61px);letter-spacing:-2px;line-height:1.14;margin:20px 0}.login-panel h1 span{color:#ff8a31}.login-panel p{color:#adc1dc;max-width:580px;line-height:1.8}.login-benefits{margin-top:45px;display:grid;gap:20px;color:#d8e9fb;font-size:13px}.login-benefits div{display:flex;align-items:center;gap:13px}.login-benefits svg{color:#ff8a31}.login-form{width:min(390px,80%);place-self:center;display:flex;flex-direction:column;gap:18px}.login-form h2{font-size:30px;margin:0}.login-form p{font-size:13px;color:#8998ac;margin:0 0 20px}.login-form .btn{margin-top:7px;padding:16px}.login-form small{font-size:11px;color:#9caabc;text-align:center}.circle-icon{background:#fff3e9;color:#e9812d;width:51px;height:51px;border-radius:14px;display:grid;place-items:center}.error{color:#c82d45;background:#fff0f1;padding:12px;font-size:12px;border-radius:7px}.mobile-menu{display:none}@media(max-width:1250px){.stats-grid{grid-template-columns:repeat(2,1fr)}.cols-two,.cols-two.lower,.cols-two.tracking{grid-template-columns:1fr}.alert-list{height:auto;max-height:350px}}@media(max-width:800px){.sidebar{transform:translateX(-100%);transition:.2s}.sidebar.show{transform:translateX(0)}.content{margin:0}.mobile-menu{display:inline-flex}.topbar{padding:0 17px}.main-inner{padding:22px 16px}.page-heading{align-items:start;flex-direction:column}.login-wrap{grid-template-columns:1fr}.login-panel{padding:30px}.login-panel .eyebrow{margin-top:20px}.login-panel h1{font-size:30px}.login-panel .login-benefits{display:none}.login-form{margin:45px auto}.form-grid{grid-template-columns:1fr}.top-right{gap:8px}.live-pill{display:none}}@media(max-width:520px){.stats-grid{grid-template-columns:1fr}.date-chip{display:none}.full-alert{align-items:start;flex-wrap:wrap}.modal{padding:16px}}
+
+/* KRIYA360 12 Nov demo: assignment picker and attendance evidence */
+.destination-map{grid-column:1/-1;margin:18px 0;padding:12px;border:1px solid #dce7f4;background:#f7faff;border-radius:16px;overflow:hidden}
+.destination-map .leaflet-container,.evidence-map .leaflet-container{border-radius:12px;z-index:1}
+.map-hint,.map-coordinates{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:#0c315e;margin:3px 4px 12px}
+.map-coordinates{margin:12px 4px 2px;color:#687e9b;font-weight:600}
+.attendance-layout{display:grid;gap:18px}
+.evidence-map{height:380px;border-radius:14px;overflow:hidden;background:#e5ecf5}
+.evidence-note{font-size:12px;color:#7789a2;margin:12px 0 0}
+.attendance-layout .card-heading h3{display:flex;align-items:center;gap:9px}
+.attendance-layout td a,.attendance-layout td svg{display:inline-flex;vertical-align:middle;gap:5px}
+@media(max-width:700px){.destination-map{padding:8px}.map-hint{font-size:12px}.attendance-layout .card{padding:14px}}
+
+/* Embedded evidence thumbnails and in-dashboard GPS inspection (12 Nov update) */
+.attendance-register .card-heading h3{display:flex;align-items:center;gap:8px}
+.attendance-filter{display:flex;align-items:center;gap:7px;border:1px solid #dde6f1;border-radius:9px;padding:8px 12px;color:#73869f}
+.attendance-filter input{border:0;outline:0;min-width:120px;width:145px;color:#173253;font-size:12px}
+.attendance-evidence-table{min-width:1080px}.attendance-evidence-table td{vertical-align:middle}.attendance-evidence-table th:nth-child(3),.attendance-evidence-table th:nth-child(5){min-width:185px}
+.gps-thumbnail{width:168px;text-align:left;border:1px solid #dbe6f2;border-radius:10px;background:#fff;padding:5px;display:flex;flex-direction:column;gap:6px;transition:border-color .15s,box-shadow .15s}
+.gps-thumbnail:hover,.gps-thumbnail:focus-visible{border-color:#ed842a;box-shadow:0 0 0 3px #f47b241f;outline:none}
+.gps-mini-map{display:block;height:92px;overflow:hidden;border-radius:6px;position:relative;background:#e5ebf3}
+.gps-mini-map .leaflet-container{z-index:0!important}.gps-thumb-caption{display:flex;align-items:center;gap:4px;color:#305a88;font-size:10px;font-weight:800;padding:1px 3px}.gps-thumb-caption svg{color:#f47b24}.gps-zoom-hint{margin-left:auto;color:#8797a9;font-size:9px}
+.no-evidence{font-size:11px;color:#93a1b4}
+.gps-evidence-backdrop{position:fixed;inset:0;z-index:1200;background:#071b36b8;display:grid;place-items:center;padding:20px}
+.gps-evidence-dialog{background:#fff;border-radius:16px;width:min(850px,100%);max-height:95vh;overflow:auto;padding:24px;box-shadow:0 20px 70px #0005}
+.gps-evidence-header{display:flex;justify-content:space-between;align-items:start;gap:15px}.gps-evidence-header h2{margin:7px 0 14px;font-size:21px;color:#142d52}
+.gps-evidence-details{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:15px}.gps-evidence-details span{display:inline-flex;align-items:center;gap:6px;padding:9px 11px;background:#f0f5fa;border-radius:8px;color:#405a77;font-size:12px}
+.gps-evidence-details svg{color:#f47b24}.gps-evidence-large{height:min(55vh,430px);min-height:260px;border-radius:12px;overflow:hidden;background:#e6eef6}.gps-evidence-large .leaflet-container{z-index:1}
+.gps-evidence-actions{display:flex;justify-content:flex-end;margin-top:15px}.attendance-register .evidence-note{margin-top:13px}
+@media(max-width:750px){.attendance-register .card-heading{align-items:flex-start;flex-direction:column}.gps-evidence-dialog{padding:14px}.gps-evidence-header h2{font-size:17px}.gps-evidence-details span{font-size:10px}}
+
+/* Expense proof and onboarding evidence review */
+.expense-evidence-cell{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.fraud-flags{color:#b45309;background:#fff4df;padding:8px;border-radius:8px;margin-top:8px;display:flex;flex-wrap:wrap;align-items:center;gap:5px;font-size:12px;max-width:420px}
+.fraud-flags small{display:block;width:100%}
+.evidence-dialog{width:min(94vw,760px);max-height:92vh;overflow-y:auto}
+.evidence-image{width:100%;max-height:55vh;object-fit:contain;background:#f3f6fa;border:1px solid #e0e5ed;border-radius:12px;margin:14px 0}
+.evidence-details{padding:14px;background:#f7f9fc;border-radius:12px;margin-bottom:16px}
+.evidence-details small{color:#66758b}
+.small-btn:disabled{opacity:.45;cursor:not-allowed}
+
+/* Driver administration — verification and mobile-friendly review dialogs */
+.review-number{padding:14px 16px;border-radius:12px;background:#edf4fb;color:#08234b;margin:14px 0;word-break:break-word}
+.review-number b{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.07em}
+.review-confirm{display:flex!important;gap:10px;align-items:flex-start;line-height:1.55;background:#fff9ed;border:1px solid #f5d5a0;padding:14px;border-radius:12px;margin:14px 0}
+.review-confirm input{width:18px!important;height:18px!important;margin-top:3px;flex-shrink:0}
+.late-note{display:block;color:#ac5600;margin-top:8px;font-weight:600}
+.modal textarea{min-height:88px;width:100%;border:1px solid #dbe4ef;border-radius:10px;padding:10px;font:inherit;resize:vertical}
+@media(max-width:820px){.review-number{font-size:13px}.modal{max-height:91vh;overflow-y:auto}}
+
+.route-dialog{width:min(960px,94vw);max-height:94vh;overflow:auto}.route-map-panel{border-radius:15px;overflow:hidden;border:1px solid #dae4ef;margin:12px 0}.route-summary{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin:16px 0}.route-turns ol{padding-left:26px;max-height:210px;overflow-y:auto}.route-turns li{padding:10px;border-bottom:1px solid #e8edf5}.route-turns li small{margin-left:10px;color:#64748b}.route-turns p{font-size:12px;color:#64748b}
+
+/* Management visual and responsive fixes */
+html,body,#root{min-height:100%;margin:0}.login-wrap{height:100vh;min-height:0;max-height:100vh;overflow:hidden}.login-panel{padding:clamp(24px,4vh,50px) 8%;display:flex;flex-direction:column;justify-content:center;min-height:0}.login-panel .eyebrow{margin-top:clamp(10px,3vh,28px)}.login-logo{height:clamp(90px,17vh,150px)}.login-panel h1{font-size:clamp(27px,3.7vw,58px);margin:clamp(12px,2vh,20px) 0}.login-panel p{line-height:1.5}.login-benefits{margin-top:clamp(14px,3vh,32px);gap:10px}.login-form{max-height:100%;overflow-y:auto;padding:12px 0}.sidebar-company{padding:16px 20px;border-top:1px solid #24446d;display:flex;flex-direction:column;gap:8px}.sidebar-company span{font-size:10px;letter-spacing:2px;color:#aac1dd}.sidebar-company img{max-width:165px;max-height:52px;object-fit:contain;object-position:left}.manager-profile-control,.manager-details-button{border:0;cursor:pointer}.manager-details-button{background:transparent;display:flex;flex-direction:column;align-items:flex-start;gap:3px;color:white;text-align:left;flex:1}.manager-details-button small{font-size:10px;color:#acc5dd}.admin-avatar-button{border:0;cursor:pointer}.destination-search{margin:18px 0 8px;position:relative}.destination-search-form{display:flex;align-items:center;gap:9px;border:1px solid #dae5f2;padding:8px 10px;border-radius:12px;background:#fff}.destination-search-form input{min-width:0;flex:1;border:0;outline:0;padding:6px;font-size:13px;color:#12345b}.destination-results{max-height:210px;overflow:auto;background:white;border:1px solid #dae5f2;border-radius:10px;box-shadow:0 8px 20px #14365a20;position:relative;z-index:5}.destination-results button{width:100%;border:0;border-bottom:1px solid #edf1f6;background:white;text-align:left;display:flex;align-items:center;gap:10px;padding:11px 12px;color:#163253;cursor:pointer}.destination-results button:hover{background:#fff3e6}.search-error{color:#ad3b3b;font-size:12px}.admin-user-grid{display:grid;grid-template-columns:minmax(260px,350px) minmax(400px,1fr);gap:22px}.admin-user-form{display:flex;flex-direction:column;gap:14px}.admin-user-form label{display:flex;flex-direction:column;gap:7px;font-size:12px;font-weight:700}.admin-user-form input{border:1px solid #dae4ef;border-radius:9px;padding:12px}.admin-user-form h3{margin:0 0 5px}@media(max-width:800px){.login-wrap{height:auto;min-height:100dvh;max-height:none;overflow:auto;grid-template-columns:1fr}.login-panel{padding:26px}.login-form{margin:15px auto;padding:20px}.admin-user-grid{grid-template-columns:1fr}}
+
+/* KRIYA360 layout and navigation corrections */
+.sidebar-company{padding:10px 12px 12px;gap:5px;flex-shrink:0}
+.sidebar-company img{max-width:112px;max-height:32px;width:auto;height:auto;object-fit:contain;object-position:left}
+.sidebar{padding-top:14px}.sidebar .brand{height:69px;width:184px;margin-bottom:3px}
+.sidebar .workspace{margin-bottom:15px;padding:9px}.sidebar .navitem{padding:10px 13px}
+.sidebar .side-bottom{gap:6px;padding-top:10px}
+.sidebar-logout{border:1px solid #456587;color:#dce9f6;border-radius:8px;background:#173457;display:inline-flex;align-items:center;gap:5px;padding:9px 7px;font-size:10px;cursor:pointer;white-space:nowrap}
+.sidebar-logout:hover{background:#234a77;color:white}
+.account-menu-wrap{position:relative}
+.account-menu{position:absolute;right:0;top:calc(100% + 10px);width:244px;background:white;border:1px solid #e0e8f1;border-radius:13px;box-shadow:0 18px 42px #0a21442b;z-index:1000;padding:8px}
+.account-menu-name{padding:12px 12px 10px;border-bottom:1px solid #eef2f7;margin-bottom:5px}.account-menu-name b{display:block;color:#132c51;font-size:13px}.account-menu-name small{color:#8594a8;font-size:11px}
+.account-menu button{border:0;background:transparent;display:flex;align-items:center;gap:10px;text-align:left;width:100%;padding:11px 12px;font-size:12px;color:#244064;border-radius:8px;cursor:pointer}
+.account-menu button:hover{background:#f3f6fc}.account-menu button.menu-logout{color:#cf374d}.account-menu button.menu-logout:hover{background:#fff0f1}
+.destination-search-form{width:100%}.destination-search-form input{width:auto;box-shadow:none}.destination-search-form button{flex-shrink:0}
+.recent-assignments{display:flex;flex-direction:column}.recent-assignment{display:grid;grid-template-columns:minmax(0,1fr) auto 76px;gap:12px;align-items:center;padding:13px 0;border-bottom:1px solid #edf2f8;min-width:0}.recent-assignment:last-child{border:0}
+.recent-assignment-main{min-width:0}.recent-assignment-main>b{font-size:12px;color:#163351;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.recent-assignment-main small{display:flex;align-items:center;gap:4px;color:#8b9bac;font-size:10px;margin-top:5px;min-width:0;line-height:1.5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.recent-assignment-main small svg{flex-shrink:0;color:#f47b24}
+.recent-route{border:1px solid #dce8fa;border-radius:8px;background:#eef5ff;color:#1b65a8;padding:9px 8px;display:flex;align-items:center;justify-content:center;gap:5px;font-size:11px;font-weight:700;white-space:nowrap}
+.recent-route:hover{background:#dfeeff}.recent-assignment .tag{font-size:9px;padding:6px 7px}
+@media(max-width:1450px){.cols-two.lower{grid-template-columns:minmax(0,1.1fr) minmax(290px,1fr)}}
+@media(max-width:1100px){.cols-two.lower{grid-template-columns:1fr}}
+@media(max-width:520px){.recent-assignment{grid-template-columns:minmax(0,1fr) auto;gap:8px}.recent-route{grid-column:2}.recent-assignment .tag{grid-column:2;grid-row:1}}
+
+/* KRIYA360 dashboard correction: branding and account layout */
+.sidebar-company{margin-top:auto; padding:18px 18px 26px; align-items:flex-start; gap:7px}
+.sidebar-company img{width:184px;max-width:100%;height:auto;max-height:66px;object-fit:contain;object-position:left center}
+.login-company-lockup{display:flex;align-items:center;gap:14px;margin-top:4px;margin-bottom:18px;flex-wrap:wrap}
+.login-company-lockup span{font-size:10px;letter-spacing:1.8px;color:#a9c4df;font-weight:700}
+.login-company-lockup img{max-width:160px;max-height:50px;object-fit:contain}
+.management-company-lockup{display:flex;align-items:center;gap:12px;flex-shrink:0}
+.management-company-lockup span{color:#8ea0b8;font-size:9px;letter-spacing:1px;font-weight:700}
+.management-company-lockup img{width:128px;max-width:100%;height:auto;max-height:47px;object-fit:contain}
+@media(max-width:700px){.management-company-lockup{display:none}.login-company-lockup{margin-bottom:10px}.login-company-lockup img{max-width:125px}}
+
+/* Live fleet tracking — driver selection, map evidence and assignment details */
+.live-tracking-workspace{display:flex;flex-direction:column;gap:16px;min-width:0}
+.fleet-headline,.fleet-counters{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.fleet-headline h3{font-size:20px;color:#0b2446;margin:0 0 4px}
+.fleet-headline p{color:#788ba5;font-size:13px;margin:0}
+.fleet-layout{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(310px,.9fr);gap:18px;align-items:start}
+.fleet-map-card,.fleet-side-panel{min-width:0;overflow:hidden}
+.fleet-map-stage{height:540px;border-radius:14px;overflow:hidden;border:1px solid #dfe7f1;background:#eaf1f7}
+.fleet-map-legend{display:flex;flex-wrap:wrap;gap:14px;padding:14px 2px 0;font-size:12px;color:#526783}
+.fleet-map-legend span{display:flex;align-items:center;gap:6px}
+.legend-dot{display:inline-block;width:10px;height:10px;border-radius:50%}.legend-dot.blue{background:#1675d1}.legend-dot.orange{background:#ff7417}.legend-dot.green{background:#119a61}
+.fleet-icon{background:transparent;border:0}
+.fleet-truck-pin{display:grid;place-items:center;width:38px;height:38px;border-radius:12px;background:#0b2854;color:white;border:3px solid #fff;box-shadow:0 3px 10px #16253d60;font-size:22px}
+.fleet-start-pin,.fleet-end-pin{display:grid;place-items:center;width:26px;height:26px;border:2px solid white;box-shadow:0 2px 7px #0d244960;border-radius:50%;font-weight:800;font-size:12px;color:white}
+.fleet-start-pin{background:#11a36b}.fleet-end-pin{background:#f47b1b}
+.fleet-driver-list{max-height:350px;overflow:auto;display:flex;flex-direction:column;gap:6px}
+.fleet-driver-option{font:inherit;text-align:left;cursor:pointer;width:100%;padding:12px;border:1px solid transparent;border-radius:12px;background:#f8fafd;display:flex;gap:10px;align-items:center;color:#0b2446}
+.fleet-driver-option:hover{background:#edf5ff;border-color:#cfdeef}
+.fleet-driver-option.selected{background:#e8f2ff;border-color:#70a7e8;box-shadow:inset 3px 0 #1675d1}
+.fleet-driver-copy{min-width:0;display:flex;flex:1;flex-direction:column;gap:3px}
+.fleet-driver-copy b{font-size:13px}.fleet-driver-copy small{font-size:11px;color:#71849d;overflow-wrap:anywhere}
+.fleet-driver-option .tag{white-space:nowrap}
+.fleet-selected-details{border-top:1px solid #e4eaf2;margin-top:15px;padding-top:15px}
+.fleet-selected-details h3{font-size:16px;margin:0 0 14px;color:#0b2446}
+.fleet-detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 10px}
+.fleet-detail-grid>div{display:flex;flex-direction:column;min-width:0;gap:3px}
+.fleet-detail-grid small{font-size:11px;color:#8090a7}.fleet-detail-grid b{font-size:12px;overflow-wrap:anywhere}
+.fleet-task-summary{margin-top:14px;border:1px solid #e3eaf4;background:#f8fafd;border-radius:12px;padding:14px;font-size:12px;color:#294465}
+.fleet-task-summary h4{font-size:13px;margin:0 0 10px;color:#0b2446}
+.fleet-task-summary p{margin:8px 0;display:flex;gap:5px;align-items:center;flex-wrap:wrap;overflow-wrap:anywhere}
+.fleet-route-warning{color:#a75b00}
+@media(max-width:1100px){.fleet-layout{grid-template-columns:1fr}.fleet-map-stage{height:460px}}
+@media(max-width:650px){.fleet-map-stage{height:360px}.fleet-detail-grid{grid-template-columns:1fr 1fr}.fleet-driver-option{flex-wrap:wrap}}
+
+/* Delivery-grouped expense register */
+.delivery-expense-list{display:grid;gap:14px}.delivery-expense-group{border:1px solid #e0e8f3;border-radius:14px;overflow:hidden;background:#fff}.delivery-expense-header{border:0;background:#f8fbff;width:100%;padding:18px;text-align:left;display:flex;align-items:center;gap:15px;color:#173457}.delivery-expense-header:hover{background:#f0f6fc}.delivery-expense-icon{width:44px;height:44px;background:#e5f0ff;color:#236fb7;display:grid;place-items:center;border-radius:11px;flex-shrink:0}.delivery-expense-summary{flex:1;min-width:0;display:grid;gap:4px}.delivery-expense-summary strong{font-size:14px}.delivery-expense-summary small{font-size:11px;color:#798ba0;overflow-wrap:anywhere}.delivery-expense-total{text-align:right;display:grid;gap:4px}.delivery-expense-total b{font-size:18px;color:#0b2a4b}.delivery-expense-total small{font-size:11px;color:#8c6a36}.expense-expand-arrow{color:#8a9caf;transition:transform .18s}.expense-expand-arrow.expanded{transform:rotate(90deg)}.delivery-expense-entries{padding:6px 18px 12px}.delivery-expense-entry{display:flex;gap:12px;align-items:center;border-bottom:1px solid #edf1f7;padding:13px 3px;flex-wrap:wrap}.delivery-expense-entry:last-child{border:0}.expense-number{background:#eef4fa;border-radius:7px;padding:8px 10px;color:#55708e;font-weight:800;font-size:12px}.expense-description{flex:1;min-width:145px;display:grid;gap:4px}.expense-description b{font-size:13px}.expense-description small{font-size:11px;color:#98a6b6}.expense-amount{font-size:14px;color:#173457}.expense-entry-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.expense-entry-actions .row-actions{gap:5px}@media(max-width:700px){.delivery-expense-header{padding:13px;gap:9px}.delivery-expense-total b{font-size:14px}.delivery-expense-entries{padding:5px 10px}.delivery-expense-entry{align-items:flex-start}.expense-entry-actions{width:100%;padding-left:35px}}
+
+/* KRIYA360 professional performance and incident command center */
+.performance-workspace,.alerts-workspace{display:grid;gap:18px;min-width:0}.perf-toolbar{display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap}.perf-toolbar h3{margin:0 0 4px;font-size:21px;color:#0b2446}.perf-toolbar p{font-size:13px;color:#7588a4;max-width:670px;margin:0}.perf-actions,.alert-controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.perf-actions select,.alert-controls select{height:39px;min-width:160px;border:1px solid #d9e4f2;border-radius:10px;padding:0 12px;background:white;font-family:inherit;color:#153259}.perf-actions button{display:flex;align-items:center;gap:6px}.perf-kpis,.alert-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.perf-kpis>div,.alert-kpis>div{background:white;border:1px solid #e1e9f3;border-radius:15px;padding:19px;box-shadow:0 4px 18px rgba(12,43,80,.035)}.perf-kpis>div{display:grid;gap:7px}.perf-kpis span,.alert-kpis small{font-size:12px;color:#70819a}.perf-kpis strong,.alert-kpis strong{font-size:26px;color:#09254c;line-height:1.1}.perf-kpis small{font-size:11px;color:#7188a0}.perf-charts{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(300px,.8fr);gap:16px}.perf-chart-card{min-width:0}.perf-chart-card .card-heading h3{display:flex;gap:7px;align-items:center}.perf-bars{display:grid;gap:16px;margin:14px 0}.perf-bar-line{display:grid;grid-template-columns:120px 1fr;gap:12px;align-items:center}.perf-bar-title{display:grid;gap:4px;min-width:0}.perf-bar-title b{font-size:12px;overflow-wrap:anywhere}.perf-bar-title small{font-size:11px;color:#7c8ea7}.perf-bar-stack{display:grid;gap:5px}.perf-bar-track{height:12px;background:#f0f4f9;border-radius:6px;display:flex;align-items:center}.perf-bar-track div{height:100%;border-radius:6px;min-width:0;transition:width .25s}.perf-bar-track small{font-size:10px;color:#405a78;margin-left:5px}.perf-legend{display:flex;flex-wrap:wrap;gap:15px;font-size:11px;color:#536d8d;margin-top:14px}.perf-legend span{display:flex;gap:6px;align-items:center}.perf-legend i,.perf-donut-key i{width:10px;height:10px;border-radius:3px;display:inline-block}.perf-donut-wrap{display:flex;align-items:center;justify-content:space-around;gap:14px;flex-wrap:wrap;padding:20px 0}.perf-donut{width:195px;height:195px;display:grid;place-items:center;border-radius:50%}.perf-donut>div{border-radius:50%;background:white;width:145px;height:145px;display:flex;flex-direction:column;align-items:center;justify-content:center}.perf-donut strong{font-size:30px;color:#0b2446}.perf-donut small{color:#7188a0}.perf-donut-key{min-width:150px}.perf-donut-key p{display:flex;align-items:center;gap:9px;font-size:12px;color:#68809f}.perf-donut-key p b{margin-left:auto;color:#193858}.perf-table{min-width:800px}.perf-disclaimer{font-size:11px;color:#7c8ea7;margin:0}.alert-kpis>div{display:flex;gap:13px;align-items:center}.alert-kpis>div>div{display:grid;gap:6px}.alert-count-icon{border-radius:13px;width:45px;height:45px;display:grid;place-items:center;flex-shrink:0}.alert-count-icon.danger{background:#ffeaed;color:#d93d4f}.alert-count-icon.amber{background:#fff1df;color:#eb840d}.alert-count-icon.blue{background:#e8f2ff;color:#2b75bd}.alert-count-icon.green{background:#e5f8ed;color:#14905a}.alert-heading{flex-wrap:wrap;gap:15px}.alert-modern-list{display:grid;gap:11px}.alert-modern-row{display:flex;align-items:flex-start;gap:13px;border:1px solid #e5ebf4;background:#fff;border-radius:13px;padding:18px;min-width:0}.alert-modern-row.is-critical{border-left:4px solid #e13a53;background:#fffbfb}.alert-modern-body{flex:1;min-width:0}.alert-modern-title{display:flex;align-items:center;flex-wrap:wrap;gap:8px;font-size:14px}.alert-modern-body p{font-size:13px;margin:7px 0;color:#465d7c}.alert-modern-body small{display:flex;align-items:center;gap:6px;flex-wrap:wrap;color:#7d8da5;font-size:11px}.alert-location{margin-top:9px;display:flex;gap:5px;align-items:center;font-size:11px;color:#597394}.alert-actions{display:flex;gap:7px;align-items:center;flex-wrap:wrap}@media(max-width:1150px){.perf-charts{grid-template-columns:1fr}.perf-kpis,.alert-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:700px){.perf-kpis,.alert-kpis{grid-template-columns:1fr 1fr;gap:8px}.perf-kpis>div,.alert-kpis>div{padding:11px}.perf-kpis strong,.alert-kpis strong{font-size:20px}.perf-bar-line{grid-template-columns:80px 1fr}.alert-modern-row{flex-wrap:wrap;padding:12px}.alert-actions{margin-left:57px}.perf-donut{width:165px;height:165px}.perf-donut>div{width:120px;height:120px}}
+@media print{.sidebar,.topbar,.heading-actions,.perf-actions,.alert-actions{display:none!important}.content{margin:0!important;width:100%!important}.main-inner{padding:0!important}.performance-workspace{gap:14px}.card{break-inside:avoid}.perf-charts{grid-template-columns:1fr 1fr!important}}
+/* KRIYA360 operations upgrade: attendance reports, bulk CSV and SOS map */
+.next-attendance-reports,.next-import,.next-attendance-perf{margin-bottom:18px}
+.next-report-controls,.next-import-actions,.next-sos-actions{display:flex;align-items:end;gap:10px;flex-wrap:wrap;margin:17px 0}
+.next-report-controls label{font-size:12px;display:flex;flex-direction:column;gap:5px;color:#566a87;font-weight:700}
+.next-report-controls input,.next-report-controls select,.next-map-mode select{border:1px solid #d9e2ee;border-radius:9px;background:white;padding:10px;color:#0c274b}
+.next-stat-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:17px 0}
+.next-stat-grid>div{background:#f2f6fb;border:1px solid #e5edf5;border-radius:11px;padding:14px;display:flex;flex-direction:column;gap:6px}
+.next-stat-grid strong{color:#0b2448;font-size:23px}.next-stat-grid small{color:#7285a1}
+.next-disclaimer{font-size:12px;color:#7386a0;line-height:1.65;margin:12px 0}
+.next-import-actions input{max-width:320px;border:1px dashed #c4d2e5;border-radius:9px;padding:12px}
+.next-import .table-wrap,.next-attendance-reports .table-wrap{max-height:390px;overflow:auto}
+.next-credentials{border:1px solid #d1eddf;background:#f1fbf6;padding:16px;border-radius:11px;margin-top:14px}
+.next-sos-dialog{max-width:900px;width:95%;max-height:90vh;overflow:auto}
+.next-sos-map{border-radius:12px;overflow:hidden;border:1px solid #e1eaf4;margin-top:12px}
+.next-map-mode{position:absolute;right:10px;top:10px;z-index:900;background:white;border:1px solid #d9e2ee;border-radius:8px;padding:6px 8px;box-shadow:0 2px 9px #1233}
+.next-map-mode label{font-size:11px;color:#3c5679;display:flex;align-items:center;gap:6px}
+.next-map-mode select{padding:5px;font-size:11px;max-width:145px}
+.alert-location{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+@media(max-width:850px){.next-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media print{.sidebar,.topbar,.heading-actions,.next-report-controls,.next-import,.next-sos-actions{display:none!important}.main-inner{padding:0}.card{box-shadow:none!important;border:1px solid #ddd!important}}
+
+/* KRIYA360 branding update: transparent sidebar logo with breathing room. */
+.sidebar .brand{display:block;width:208px;height:auto;max-height:96px;object-fit:contain;object-position:center;margin:0 auto 22px;background:transparent;border:0;padding:0;flex-shrink:0}
+.sidebar .workspace{margin-top:0;margin-bottom:17px}
+.sidebar-company img{background:transparent;object-fit:contain}
+@media(max-width:800px){.sidebar .brand{width:190px;max-height:84px;margin-bottom:20px}}
+
+/* KRIYA360 sidebar identity — 12 Nov 2026. Assets use transparent PNG alpha. */
+.sidebar .brand {
+  display: block;
+  width: min(210px, 100%);
+  height: 86px;
+  max-height: none;
+  object-fit: contain;
+  object-position: center;
+  margin: 0 auto 20px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.sidebar .workspace { margin-top: 0; margin-bottom: 20px; }
+.sidebar-company {
+  margin-top: auto;
+  padding: 16px 12px 19px;
+  align-items: center;
+  gap: 9px;
+}
+.sidebar-company span { align-self: center; }
+.sidebar-company img {
+  display: block;
+  width: min(193px, 100%);
+  max-width: 100%;
+  height: auto;
+  max-height: 61px;
+  object-fit: contain;
+  object-position: center;
+  background: transparent;
+}
+@media (max-width: 800px) {
+  .sidebar .brand { width: min(210px, 100%); height: 86px; margin-bottom: 20px; }
+}
+
+/* 2026-11-12 driver verification / sign-in refinements */
+.license-reject-btn{background:#fff0f1;color:#b92e43;border:1px solid #f2c4cb;cursor:pointer;font-weight:700}
+.license-reject-btn:hover{background:#ffe3e8}
+.login-logo{display:block;width:min(100%,460px);max-width:460px;height:auto;max-height:176px;object-fit:contain;object-position:left center;border-radius:8px}
+.login-form .btn:focus-visible,.license-reject-btn:focus-visible{outline:3px solid #fa8b32;outline-offset:3px}
+
+/* Emergency SOS is accessible from every dashboard page. No external map links. */
+.sos-toolbar{position:relative;border:0;background:transparent;color:#627d9f;cursor:pointer;padding:9px;border-radius:12px;display:inline-flex;align-items:center;justify-content:center}
+.sos-toolbar-active{background:#fff0f1;color:#cb263a;animation:sos-pulse 1.7s infinite}
+.sos-counter{position:absolute;top:-5px;right:-6px;background:#d92338;color:white;border-radius:99px;font-size:10px;font-weight:800;min-width:17px;height:17px;display:grid;place-items:center}
+@keyframes sos-pulse{50%{box-shadow:0 0 0 5px #fbcbd088}}
+.sos-command{position:fixed;z-index:150;right:22px;top:90px;width:min(390px,calc(100vw - 25px));max-height:calc(100vh - 110px);overflow:auto;background:white;border:2px solid #e74a56;border-radius:16px;box-shadow:0 20px 55px #041c3255;color:#102a4b}
+.sos-command header{padding:15px 18px;background:#fff0f2;display:flex;align-items:center;justify-content:space-between;color:#b91c33}
+.sos-command header>div{display:flex;gap:8px;align-items:center}.sos-command header span{font-size:11px}.sos-command header button{border:0;background:transparent;color:#b91c33;cursor:pointer}
+.sos-command-body{padding:10px 16px}.sos-command article{padding:12px 0;border-bottom:1px solid #e8ecf3}.sos-command article strong{font-size:14px;display:block}.sos-command article small{color:#526c82;display:block;margin-top:4px;line-height:1.5}.sos-command article p{font-size:12px;margin:8px 0}.sos-command-actions{display:flex;gap:8px}.sos-command-actions button,.sos-sound{border:0;background:#d92338;color:white;padding:9px 12px;border-radius:8px;font-weight:700;cursor:pointer;display:flex;gap:7px;align-items:center;font-size:11px}.sos-command-actions button:first-child{background:#e9f2fc;color:#144c88}.sos-sound{margin:10px 16px 14px;background:#0e315c}.sos-sound-status{display:block;margin:12px 16px;color:#477b66}.sos-sound-error{color:#b91c33;font-size:11px;margin:8px 16px}
+/* Remove rectangular logo artifact and let the PNG blend into the login panel. */
+.login-logo{border-radius:0;mix-blend-mode:lighten;object-fit:contain}
+
+/* Keep the SOS notification visible above dashboard content but below active dialogs.
+   An open SOS map must not be obstructed by its own alert card. */
+body:has(.modal-backdrop) .sos-command{visibility:hidden;pointer-events:none}
+body:has(.modal-backdrop) .sos-toolbar{pointer-events:none}
+.next-sos-dialog{position:relative;isolation:isolate;max-height:min(90dvh,850px);overflow-y:auto}
+.next-sos-map{height:380px;position:relative;isolation:isolate;overflow:hidden}
+.next-sos-map .leaflet-container{height:100%!important;width:100%!important}
+.next-sos-dialog .next-disclaimer{line-height:1.5;margin:14px 0 8px}
+
+/* Notification center: compact, scrollable, stays inside the viewport. */
+.sos-command{top:76px;right:18px;width:min(398px,calc(100vw - 36px));max-height:min(76dvh,680px);display:flex;flex-direction:column;overflow:hidden;z-index:1200;border:1px solid #d9e3f0;box-shadow:0 16px 45px #102c4d35}
+.sos-command header{flex-shrink:0;background:#f6f8fc;color:#19395a;padding:13px 15px}
+.sos-command header>div{min-width:0;flex-wrap:wrap}.sos-command header span{font-size:10px;color:#667b95}
+.sos-command-body{overflow-y:auto;min-height:0;padding:10px 14px;overscroll-behavior:contain}
+.sos-section-title{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:#4a6986;padding:10px 0 4px}
+.sos-section-title.danger{color:#b7253d}
+.sos-emergency-row{border-radius:11px;border:1px solid #ffcfda;background:#fff7f9;padding:12px!important;margin:6px 0}
+.sos-normal-row{padding:9px 3px!important}.sos-normal-row strong{color:#19395a}.sos-normal-row p{color:#667b91}
+.sos-command-footer{border-top:1px solid #e9eff6;padding:10px 14px;display:flex;flex-wrap:wrap;gap:9px;align-items:center;background:white}
+.sos-command-footer .sos-sound{margin:0;background:#193d6a}
+.sos-command-footer .sos-sound-status{margin:0;display:inline-flex;gap:5px;align-items:center;font-size:11px}
+.sos-view-all{background:#edf3fc;color:#245480;border:0;border-radius:8px;padding:9px 11px;font-size:11px;font-weight:800;cursor:pointer}
+.sos-command-footer .sos-sound-error{width:100%;margin:2px 0}
+.sos-empty{font-size:12px;color:#6c809a}
+/* Critical fix: the overview's Leaflet panes must never render over the modal. */
+.modal-backdrop{z-index:5000!important;isolation:isolate;transform:translateZ(0)}
+.next-sos-dialog{z-index:1;isolation:isolate;overflow-x:hidden;max-width:960px;width:min(960px,96vw)}
+.next-sos-map{height:380px!important;display:block;position:relative;isolation:isolate;overflow:hidden;contain:layout paint}
+.next-sos-map .leaflet-container{position:relative;z-index:0!important;height:380px!important;width:100%!important}
+.shell:has(.next-sos-dialog) .main-inner .leaflet-container{visibility:hidden!important}
+body:has(.modal-backdrop) .sos-command{display:none!important}
+@media(max-width:600px){.sos-command{right:8px;top:65px;width:calc(100vw - 16px);max-height:73dvh}.next-sos-map,.next-sos-map .leaflet-container{height:310px!important}}
+
+/* SOS dialog lives in a body portal, outside Leaflet/GPU stacking contexts. */
+.sos-portal-backdrop{position:fixed!important;inset:0!important;z-index:2147483000!important;background:rgba(5,20,42,.78)!important;display:flex!important;align-items:center!important;justify-content:center!important;overflow:auto!important;padding:18px!important;transform:none!important;contain:none!important}
+.sos-portal-backdrop .next-sos-dialog{position:relative!important;z-index:1!important;display:flex!important;flex-direction:column!important;width:min(920px,96vw)!important;max-height:calc(100dvh - 36px)!important;overflow:auto!important;background:#fff!important;box-shadow:0 35px 100px #061327aa!important}
+.sos-portal-backdrop .next-sos-map{height:390px!important;min-height:390px!important;overflow:hidden!important;isolation:isolate!important;transform:translateZ(0);border-radius:12px}
+.sos-portal-backdrop .next-sos-map .leaflet-container{height:390px!important;width:100%!important;visibility:visible!important;position:relative!important;z-index:0!important}
+.sos-portal-backdrop .leaflet-pane{z-index:400!important}.sos-portal-backdrop .leaflet-tile-pane{z-index:200!important}.sos-portal-backdrop .leaflet-control{z-index:800!important}
+body:has(.sos-portal-backdrop) .shell .leaflet-container{visibility:hidden!important}
+.admin-setup-toggle{background:none;border:0;padding:10px;color:#285d95;cursor:pointer;font-weight:600;text-decoration:underline}
+@media(max-width:600px){.sos-portal-backdrop{padding:8px!important}.sos-portal-backdrop .next-sos-map,.sos-portal-backdrop .next-sos-map .leaflet-container{height:320px!important;min-height:320px!important}}
+
+/* 12 Nov: compact, user-invoked notification center. All SOS sounds are unchanged. */
+.sos-command{top:76px!important;right:18px!important;width:min(360px,calc(100vw - 28px))!important;max-height:min(62dvh,550px)!important;border:1px solid #dbe4ee!important;border-radius:14px!important;box-shadow:0 14px 35px #0d28422c!important}
+.sos-compact-toast{position:fixed;z-index:1250;right:18px;top:78px;width:min(326px,calc(100vw - 30px));background:#fff;border:1px solid #f3b5be;border-left:4px solid #dc2942;border-radius:13px;box-shadow:0 12px 32px #0d284230;padding:12px 14px;color:#132c48}
+.sos-compact-top{display:flex;align-items:center;gap:7px;color:#b82036;font-size:12px}.sos-compact-top strong{flex:1}.sos-compact-top button{border:0;background:transparent;color:#60738b;cursor:pointer;display:flex;padding:3px}
+.sos-compact-toast p{margin:8px 0 11px;font-size:12px;line-height:1.4}.sos-compact-actions{display:flex;gap:8px}.sos-compact-actions button{border:0;border-radius:7px;padding:8px 10px;font-size:11px;font-weight:750;cursor:pointer;background:#eaf1f9;color:#24496e}.sos-compact-actions button:first-child{background:#d92338;color:#fff}
+@media(max-width:600px){.sos-command{right:8px!important;top:65px!important;max-height:62dvh!important}.sos-compact-toast{right:8px;top:65px}}
+
+/* Persistent SOS notice: only server acknowledgement removes an emergency. */
+.sos-compact-toast.sos-persistent{z-index:1350;width:min(420px,calc(100vw - 26px));border-left-width:5px;padding:13px 15px;box-shadow:0 16px 46px #12294340}
+.sos-persistent .sos-compact-top{flex-wrap:wrap}.sos-persistent .sos-unacked{font-size:10px;color:#ad1c32;background:#ffe9ec;padding:3px 6px;border-radius:6px;font-weight:700}
+.sos-persistent .sos-compact-actions{margin-top:11px;flex-wrap:wrap}.sos-persistent .sos-compact-actions button{white-space:nowrap}
+.sos-persistent .sos-compact-actions .sos-ack-btn{background:#b81e34;color:white}
+.sos-persistent .sos-time{font-size:11px;color:#6a7890}
+.sos-toast-sound{display:inline-flex;align-items:center;gap:7px;background:#0a315a;color:#fff;border:0;border-radius:8px;padding:9px 12px;margin-top:10px;font-size:12px;cursor:pointer;font-weight:700}
+.sos-persistent .sos-sound-error{margin:7px 0 0;color:#b81e34;font-size:11px}
+body:has(.sos-portal-backdrop) .sos-compact-toast{display:none!important}
+@media(max-width:600px){.sos-compact-toast.sos-persistent{top:64px;right:8px;width:calc(100vw - 16px)}}

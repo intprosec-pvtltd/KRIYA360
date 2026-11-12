@@ -1,0 +1,58 @@
+**/.venv/
+**/__pycache__/
+**/.pytest_cache/
+**/node_modules/
+**/dist/
+**/build/
+**/.dart_tool/
+**/kriya360.db
+**/uploads/*
+*.log
+.env
+
+# KRIYA360 local backup folders
+Attendance_Map_Backup_*/
+Backup_Before_*/
+Flutter_Backup_Before_Fix/
+Update_Backups/
+Update_Backup_*/
+Backups/
+
+# Secrets and environment files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.jks
+*.keystore
+
+# Private operational data
+*.db
+*.sqlite
+*.sqlite3
+uploads/
+runtime/
+logs/
+
+# Dependencies and generated output
+node_modules/
+dist/
+build/
+.dart_tool/
+.venv/
+__pycache__/
+*.pyc
+*.log
+
+# Local configuration
+android/local.properties
+android/key.properties
+
+# Additional backup exclusions
+*.bak
+*.backup
+*.backup_*
+*.backup.*
+*.backup.xml
+*.before_*

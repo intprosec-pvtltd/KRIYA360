@@ -1,0 +1,27 @@
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: kriya
+      POSTGRES_PASSWORD: kriya
+      POSTGRES_DB: kriya360
+    ports:
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - kriya_db:/var/lib/postgresql/data
+  api:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://kriya:kriya@postgres:5432/kriya360
+      JWT_SECRET: DEVELOPMENT-ONLY-CHANGE-ME-AT-LEAST-32-CHARS
+      DEMO_SEED: 'true'
+      BUSINESS_TIMEZONE: Asia/Kolkata
+    ports:
+      - '8000:8000'
+    depends_on:
+      - postgres
+    volumes:
+      - kriya_uploads:/srv/uploads
+volumes:
+  kriya_db:
+  kriya_uploads:
