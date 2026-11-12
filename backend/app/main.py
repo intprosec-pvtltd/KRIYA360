@@ -401,13 +401,50 @@ def review_face_photo(uid:str,x:FaceReview,s:Session=Depends(db),_=Depends(manag
  u.face_review_note=x.review_note.strip() or ('Manager visually reviewed uploaded face photograph' if x.approved else 'Rejected: retake and submit a clear face photograph')
  s.commit()
  return safe_user(u)
+# Office-only attendance: disabled until an operator sets actual office coordinates.
+# Enabled mode fails closed if configuration is incomplete or inaccurate.
+def office_attendance_policy():
+ enabled=os.getenv('OFFICE_GEOFENCE_ENABLED','false').strip().lower() in ('true','1','yes','on')
+ if not enabled:return {'enabled':False}
+ try:
+  lat=float(os.environ['OFFICE_LATITUDE']);lng=float(os.environ['OFFICE_LONGITUDE'])
+  radius=float(os.getenv('OFFICE_RADIUS_METERS','150'))
+  max_accuracy=float(os.getenv('OFFICE_MAX_GPS_ACCURACY_METERS','75'))
+  if not (-90<=lat<=90 and -180<=lng<=180 and 30<=radius<=2000 and 5<=max_accuracy<=500):raise ValueError('out of bounds')
+ except (KeyError,ValueError,OverflowError):
+  err(503,'Office attendance policy is not configured correctly; contact management')
+ return {'enabled':True,'lat':lat,'lng':lng,'radius_m':radius,'max_accuracy_m':max_accuracy}
+
+def office_distance_m(lat1,lng1,lat2,lng2):
+ radius=6371008.8
+ a=math.sin(math.radians(lat2-lat1)/2)**2+math.cos(math.radians(lat1))*math.cos(math.radians(lat2))*math.sin(math.radians(lng2-lng1)/2)**2
+ return 2*radius*math.asin(min(1.0,math.sqrt(a)))
+
+def enforce_office_punch(x):
+ policy=office_attendance_policy()
+ if not policy['enabled']:return
+ if x.accuracy_m is None or not math.isfinite(x.accuracy_m) or x.accuracy_m>policy['max_accuracy_m']:
+  err(422,'A precise GPS fix is required for office attendance. Move outdoors and retry')
+ if not math.isfinite(x.lat) or not math.isfinite(x.lng):err(422,'Invalid device GPS location')
+ # Conservative validation: allow position only when the accuracy circle lies inside the office radius.
+ distance=office_distance_m(x.lat,x.lng,policy['lat'],policy['lng'])
+ if distance+x.accuracy_m>policy['radius_m']:
+  err(403,f'Punch allowed only within {round(policy["radius_m"])} m of the office. Current GPS is outside the permitted area (approximately {round(distance)} m from office)')
+
+@app.get('/api/attendance/office-policy')
+def attendance_office_policy(_=Depends(driver)):
+ policy=office_attendance_policy()
+ return {'enabled':policy['enabled'],'radius_m':policy.get('radius_m'),'max_accuracy_m':policy.get('max_accuracy_m')}
+
 @app.post('/api/attendance/punch-in')
 def punch_in(x:Punch,u=Depends(driver),s:Session=Depends(db)):
+ enforce_office_punch(x)
  if u.shift_start and (not u.shift_end or naive(u.shift_start)>naive(u.shift_end)):err(409,'Already punched in')
  u.shift_start=now();u.shift_end=None;u.lat=x.lat;u.lng=x.lng;u.last_gps=now();u.last_gps_received_at=now();u.last_vehicle=x.vehicle or u.vehicle
  s.add(Attendance(id=str(uuid.uuid4()),driver_id=u.id,kind='in',at=now(),lat=x.lat,lng=x.lng,vehicle=u.last_vehicle));s.commit();return safe_user(u)
 @app.post('/api/attendance/punch-out')
 def punch_out(x:Punch,u=Depends(driver),s:Session=Depends(db)):
+ enforce_office_punch(x)
  if not u.shift_start or (u.shift_end and naive(u.shift_end)>naive(u.shift_start)):err(409,'Not punched in')
  u.shift_end=now();u.lat=x.lat;u.lng=x.lng;u.last_gps=now();u.last_gps_received_at=now();s.add(Attendance(id=str(uuid.uuid4()),driver_id=u.id,kind='out',at=now(),lat=x.lat,lng=x.lng,vehicle=x.vehicle or u.last_vehicle));s.commit();return safe_user(u)
 @app.get('/api/attendance')
