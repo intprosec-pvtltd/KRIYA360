@@ -31,7 +31,7 @@ class User(Base):
  __tablename__='users'
  id=Column(String,primary_key=True); role=Column(String,nullable=False); name=Column(String,nullable=False); phone=Column(String,unique=True,nullable=False); pin_hash=Column(String,nullable=False); email=Column(String,nullable=True,unique=True); password_hash=Column(String,nullable=True)
  language=Column(String,default='en'); license_no=Column(String,default=''); vehicle=Column(String,default=''); vehicle_plate=Column(String,default=''); face_path=Column(String,default=''); license_path=Column(String,default=''); approved=Column(Boolean,default=True)
- shift_start=Column(DateTime(timezone=True)); shift_end=Column(DateTime(timezone=True)); lat=Column(Float); lng=Column(Float); last_gps=Column(DateTime(timezone=True)); last_vehicle=Column(String,default='')
+ shift_start=Column(DateTime(timezone=True)); shift_end=Column(DateTime(timezone=True)); lat=Column(Float); lng=Column(Float); last_gps=Column(DateTime(timezone=True)); last_gps_received_at=Column(DateTime(timezone=True)); last_vehicle=Column(String,default='')
  pin_change_required=Column(Boolean,default=False); shift_expected=Column(String,default='09:00'); shift_end_expected=Column(String,default='18:00'); license_verified=Column(Boolean,default=False); license_review_note=Column(String,default=''); license_inspected_at=Column(DateTime(timezone=True)); license_inspected_by=Column(String,default=''); active=Column(Boolean,default=True); face_review_status=Column(String,default='not_submitted'); face_review_note=Column(String,default='')
 class Task(Base):
  __tablename__='tasks'
@@ -56,7 +56,7 @@ Base.metadata.create_all(engine)
 # Back up the SQLite file before deployment; no existing rows are removed.
 with engine.begin() as connection:
  for table, additions in {
-  'users': {'email':'VARCHAR','password_hash':'VARCHAR','pin_change_required':'BOOLEAN DEFAULT 0','shift_end_expected':"VARCHAR DEFAULT '18:00'",'license_path':'VARCHAR','license_verified':'BOOLEAN DEFAULT 0','license_review_note':"VARCHAR DEFAULT ''",'license_inspected_at':'DATETIME','license_inspected_by':"VARCHAR DEFAULT ''",'active':'BOOLEAN DEFAULT 1','face_review_status':"VARCHAR DEFAULT 'not_submitted'",'face_review_note':"VARCHAR DEFAULT ''"},
+  'users': {'last_gps_received_at':'TIMESTAMP','email':'VARCHAR','password_hash':'VARCHAR','pin_change_required':'BOOLEAN DEFAULT 0','shift_end_expected':"VARCHAR DEFAULT '18:00'",'license_path':'VARCHAR','license_verified':'BOOLEAN DEFAULT 0','license_review_note':"VARCHAR DEFAULT ''",'license_inspected_at':'DATETIME','license_inspected_by':"VARCHAR DEFAULT ''",'active':'BOOLEAN DEFAULT 1','face_review_status':"VARCHAR DEFAULT 'not_submitted'",'face_review_note':"VARCHAR DEFAULT ''"},
   'tasks': {'route_alternatives_json':"TEXT DEFAULT '[]'",'late_reason':"TEXT DEFAULT ''",'late_reason_at':'DATETIME','otp_attempts':'INTEGER DEFAULT 0'},
   'gps': {'accuracy_m':'FLOAT','speed_mps':'FLOAT','captured_at':'TIMESTAMP','sample_id':'VARCHAR'},
   'expenses': {'evidence_sha':'VARCHAR','evidence_visual':'VARCHAR','fraud_flags':"TEXT DEFAULT '[]'",'evidence_reviewed':'BOOLEAN DEFAULT 0','reviewed_at':'DATETIME'}
@@ -404,12 +404,12 @@ def review_face_photo(uid:str,x:FaceReview,s:Session=Depends(db),_=Depends(manag
 @app.post('/api/attendance/punch-in')
 def punch_in(x:Punch,u=Depends(driver),s:Session=Depends(db)):
  if u.shift_start and (not u.shift_end or naive(u.shift_start)>naive(u.shift_end)):err(409,'Already punched in')
- u.shift_start=now();u.shift_end=None;u.lat=x.lat;u.lng=x.lng;u.last_gps=now();u.last_vehicle=x.vehicle or u.vehicle
+ u.shift_start=now();u.shift_end=None;u.lat=x.lat;u.lng=x.lng;u.last_gps=now();u.last_gps_received_at=now();u.last_vehicle=x.vehicle or u.vehicle
  s.add(Attendance(id=str(uuid.uuid4()),driver_id=u.id,kind='in',at=now(),lat=x.lat,lng=x.lng,vehicle=u.last_vehicle));s.commit();return safe_user(u)
 @app.post('/api/attendance/punch-out')
 def punch_out(x:Punch,u=Depends(driver),s:Session=Depends(db)):
  if not u.shift_start or (u.shift_end and naive(u.shift_end)>naive(u.shift_start)):err(409,'Not punched in')
- u.shift_end=now();u.lat=x.lat;u.lng=x.lng;u.last_gps=now();s.add(Attendance(id=str(uuid.uuid4()),driver_id=u.id,kind='out',at=now(),lat=x.lat,lng=x.lng,vehicle=x.vehicle or u.last_vehicle));s.commit();return safe_user(u)
+ u.shift_end=now();u.lat=x.lat;u.lng=x.lng;u.last_gps=now();u.last_gps_received_at=now();s.add(Attendance(id=str(uuid.uuid4()),driver_id=u.id,kind='out',at=now(),lat=x.lat,lng=x.lng,vehicle=x.vehicle or u.last_vehicle));s.commit();return safe_user(u)
 @app.get('/api/attendance')
 def attendance(s:Session=Depends(db),_=Depends(manager)):
  return [{'id':a.id,'driver_id':a.driver_id,'kind':a.kind,'at':iso(a.at),'lat':a.lat,'lng':a.lng,'vehicle':a.vehicle} for a in s.scalars(select(Attendance).order_by(Attendance.at.desc()).limit(300))]
@@ -500,6 +500,9 @@ def gps(x:Coords,u=Depends(driver),s:Session=Depends(db)):
  newer=not u.last_gps or naive(captured)>naive(u.last_gps)
  if newer and high_quality:
   u.lat=x.lat;u.lng=x.lng;u.last_gps=captured
+  # Only newly captured points prove that this device is currently reporting.
+  if (recorded-captured).total_seconds()<=90:
+   u.last_gps_received_at=recorded
  s.add(GPS(id=str(uuid.uuid4()),sample_id=x.sample_id,driver_id=u.id,task_id=x.task_id,lat=x.lat,lng=x.lng,at=recorded,accuracy_m=x.accuracy_m,speed_mps=x.speed_mps,captured_at=captured))
  deviations=[]
  fresh=(recorded-captured).total_seconds()<90 and (recorded-captured).total_seconds()>-20
@@ -524,26 +527,47 @@ def gps(x:Coords,u=Depends(driver),s:Session=Depends(db)):
      t.route_deviation=False
      new_alert(s,'route_restored',u.id,f'{u.name} returned to the saved route',t.id,lat=x.lat,lng=x.lng)
  s.commit()
- return {'ok':True,'duplicate':False,'time':iso(u.last_gps),'server_time':iso(recorded),'deviation_alerts':deviations}
+ return {'ok':True,'duplicate':False,'accepted_live':bool(newer and high_quality and (recorded-captured).total_seconds()<=90),'time':iso(u.last_gps),'server_time':iso(recorded),'deviation_alerts':deviations}
+
+def gps_freshness(u, current):
+ """Shift membership and device connectivity must never be conflated.
+
+ A delayed offline upload is stored in history but cannot make a driver look live.
+ """
+ last=u.last_gps
+ if last is None or u.lat is None or u.lng is None:
+  return None,'no_gps'
+ stamp=u.last_gps_received_at or last
+ if stamp.tzinfo is None:stamp=stamp.replace(tzinfo=timezone.utc)
+ age=max(0,(current-stamp).total_seconds())
+ return round(age),'fresh' if age<=45 else 'stale' if age<=150 else 'offline'
 
 @app.get('/api/tracking/status')
 def driver_tracking_status(u=Depends(driver),s:Session=Depends(db)):
- age=(now()-u.last_gps.replace(tzinfo=timezone.utc) if u.last_gps and not u.last_gps.tzinfo else now()-u.last_gps) if u.last_gps else None
+ current=now()
+ age,status=gps_freshness(u,current)
  active=bool(u.shift_start and (not u.shift_end or naive(u.shift_start)>naive(u.shift_end)))
- return {'driver_id':u.id,'on_shift':active,'last_gps':iso(u.last_gps),'gps_age_seconds':round(age.total_seconds()) if age else None,'gps_status':'no_gps' if age is None else 'fresh' if age.total_seconds()<=30 else 'stale' if age.total_seconds()<=120 else 'offline','server_time':iso(now())}
+ return {'driver_id':u.id,'on_shift':active,'last_gps':iso(u.last_gps),
+         'last_gps_received_at':iso(u.last_gps_received_at),
+         'gps_age_seconds':age,'gps_status':status,'server_time':iso(current)}
 
 @app.get('/api/tracking/fleet')
 def fleet_tracking(s:Session=Depends(db),_=Depends(manager)):
  current=now()
  drivers=list(s.scalars(select(User).where(User.role=='driver',User.active==True)))
- # In-progress tasks only, never historical jobs; each driver is identified by their own ID.
  active_tasks={t.driver_id:t for t in s.scalars(select(Task).where(Task.status=='in_progress').order_by(Task.started_at.desc()))}
  result=[]
  for u in drivers:
-  age=(current-(u.last_gps.replace(tzinfo=timezone.utc) if not u.last_gps.tzinfo else u.last_gps)).total_seconds() if u.last_gps else None
+  age,status=gps_freshness(u,current)
   photo_ok=bool(u.face_path and u.face_review_status=='approved')
   task=active_tasks.get(u.id)
-  result.append({'driver_id':u.id,'name':u.name,'vehicle':u.vehicle,'on_shift':bool(u.shift_start and (not u.shift_end or naive(u.shift_start)>naive(u.shift_end))), 'lat':u.lat,'lng':u.lng,'last_gps':iso(u.last_gps),'gps_age_seconds':round(age) if age is not None else None,'gps_status':'no_gps' if age is None or u.lat is None or u.lng is None else 'fresh' if 0<=age<=30 else 'stale' if age<=120 else 'offline', 'approved_photo_url':('/api/files/'+Path(u.face_path).name) if photo_ok else None,'current_task':task_json(task,s) if task else None})
+  result.append({'driver_id':u.id,'name':u.name,'vehicle':u.vehicle,
+   'on_shift':bool(u.shift_start and (not u.shift_end or naive(u.shift_start)>naive(u.shift_end))),
+   'lat':u.lat,'lng':u.lng,'last_gps':iso(u.last_gps),
+   'last_gps_received_at':iso(u.last_gps_received_at),
+   'gps_age_seconds':age,'gps_status':status,
+   'approved_photo_url':('/api/files/'+Path(u.face_path).name) if photo_ok else None,
+   'current_task':task_json(task,s) if task else None})
  return {'server_time':iso(current),'drivers':result}
 
 @app.get('/api/gps/{driver_id}')
