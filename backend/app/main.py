@@ -38,10 +38,10 @@ class Task(Base):
  id=Column(String,primary_key=True); title=Column(String,nullable=False); address=Column(String,nullable=False); lat=Column(Float,nullable=False); lng=Column(Float,nullable=False)
  driver_id=Column(String,ForeignKey('users.id')); status=Column(String,default='assigned'); priority=Column(String,default='normal'); customer=Column(String,default=''); customer_phone=Column(String,default='')
  instructions=Column(Text,default=''); due_at=Column(DateTime(timezone=True)); assigned_at=Column(DateTime(timezone=True)); started_at=Column(DateTime(timezone=True)); completed_at=Column(DateTime(timezone=True)); proof_path=Column(String,default=''); otp_hash=Column(String,default=''); otp_expires=Column(DateTime(timezone=True)); otp_verified=Column(Boolean,default=False); otp_attempts=Column(Integer,default=0)
- late_reason=Column(Text,default=''); late_reason_at=Column(DateTime(timezone=True)); route_json=Column(Text,default=''); route_distance_km=Column(Float,default=0); route_duration_min=Column(Float,default=0); route_source=Column(String,default=''); route_deviation=Column(Boolean,default=False)
+ late_reason=Column(Text,default=''); late_reason_at=Column(DateTime(timezone=True)); route_json=Column(Text,default=''); route_alternatives_json=Column(Text,default='[]'); route_distance_km=Column(Float,default=0); route_duration_min=Column(Float,default=0); route_source=Column(String,default=''); route_deviation=Column(Boolean,default=False)
 class GPS(Base):
  __tablename__='gps'
- id=Column(String,primary_key=True); driver_id=Column(String,ForeignKey('users.id')); task_id=Column(String); lat=Column(Float); lng=Column(Float); at=Column(DateTime(timezone=True))
+ id=Column(String,primary_key=True); driver_id=Column(String,ForeignKey('users.id')); task_id=Column(String); lat=Column(Float); lng=Column(Float); at=Column(DateTime(timezone=True)); accuracy_m=Column(Float); speed_mps=Column(Float); captured_at=Column(DateTime(timezone=True))
 class Expense(Base):
  __tablename__='expenses'
  id=Column(String,primary_key=True); driver_id=Column(String,ForeignKey('users.id')); task_id=Column(String,ForeignKey('tasks.id')); category=Column(String); amount=Column(Float); note=Column(Text,default=''); receipt_path=Column(String,default=''); evidence_sha=Column(String,default=''); evidence_visual=Column(String,default=''); fraud_flags=Column(Text,default='[]'); evidence_reviewed=Column(Boolean,default=False); reviewed_at=Column(DateTime(timezone=True)); status=Column(String,default='pending'); created_at=Column(DateTime(timezone=True))
@@ -57,7 +57,8 @@ Base.metadata.create_all(engine)
 with engine.begin() as connection:
  for table, additions in {
   'users': {'email':'VARCHAR','password_hash':'VARCHAR','pin_change_required':'BOOLEAN DEFAULT 0','shift_end_expected':"VARCHAR DEFAULT '18:00'",'license_path':'VARCHAR','license_verified':'BOOLEAN DEFAULT 0','license_review_note':"VARCHAR DEFAULT ''",'license_inspected_at':'DATETIME','license_inspected_by':"VARCHAR DEFAULT ''",'active':'BOOLEAN DEFAULT 1','face_review_status':"VARCHAR DEFAULT 'not_submitted'",'face_review_note':"VARCHAR DEFAULT ''"},
-  'tasks': {'late_reason':"TEXT DEFAULT ''",'late_reason_at':'DATETIME','otp_attempts':'INTEGER DEFAULT 0'},
+  'tasks': {'route_alternatives_json':"TEXT DEFAULT '[]'",'late_reason':"TEXT DEFAULT ''",'late_reason_at':'DATETIME','otp_attempts':'INTEGER DEFAULT 0'},
+  'gps': {'accuracy_m':'FLOAT','speed_mps':'FLOAT','captured_at':'TIMESTAMP'},
   'expenses': {'evidence_sha':'VARCHAR','evidence_visual':'VARCHAR','fraud_flags':"TEXT DEFAULT '[]'",'evidence_reviewed':'BOOLEAN DEFAULT 0','reviewed_at':'DATETIME'}
  }.items():
   existing={c['name'] for c in inspect(connection).get_columns(table)}
@@ -111,7 +112,7 @@ def license_upload_locked(u):
 def safe_user(u):return {'id':u.id,'role':u.role,'name':u.name,'phone':u.phone,'email':u.email if u.role=='manager' else None,'language':u.language,'license_no':u.license_no,'vehicle':u.vehicle,'vehicle_plate':u.vehicle_plate,'face_enrolled':bool(u.face_path),'face_review_status':('approved' if u.face_review_status=='approved' else 'rejected' if u.face_review_status=='rejected' else 'pending' if u.face_path else 'not_submitted'),'face_review_note':u.face_review_note or '', 'face_url':'/api/files/'+Path(u.face_path).name if u.face_path else None,'license_url':'/api/files/'+Path(u.license_path).name if u.license_path else None,'approved':u.approved,'active':u.active is not False,'license_verified':bool(u.license_verified),'license_review_note':u.license_review_note or '','license_status':license_status(u),'license_inspected_at':iso(u.license_inspected_at),'on_shift':bool(u.shift_start and (not u.shift_end or naive(u.shift_start)>naive(u.shift_end))),'lat':u.lat,'lng':u.lng,'last_gps':iso(u.last_gps),'shift_expected':u.shift_expected,'shift_end_expected':u.shift_end_expected,'pin_change_required':bool(u.pin_change_required)}
 def task_json(t,s):
  d=s.get(User,t.driver_id) if t.driver_id else None
- return {'id':t.id,'title':t.title,'address':t.address,'lat':t.lat,'lng':t.lng,'driver_id':t.driver_id,'driver_name':d.name if d else None,'status':t.status,'priority':t.priority,'customer':t.customer,'customer_phone':t.customer_phone,'instructions':t.instructions,'due_at':iso(t.due_at),'assigned_at':iso(t.assigned_at),'started_at':iso(t.started_at),'completed_at':iso(t.completed_at),'proof_url':('/api/files/'+Path(t.proof_path).name) if t.proof_path else None,'otp_verified':t.otp_verified,'route_distance_km':t.route_distance_km,'route_duration_min':t.route_duration_min,'route_source':t.route_source,'route_available':bool(t.route_json and t.route_source.startswith('OSRM')),'route_deviation':t.route_deviation,'late_reason':t.late_reason or '','late_reason_at':iso(t.late_reason_at)}
+ return {'id':t.id,'title':t.title,'address':t.address,'lat':t.lat,'lng':t.lng,'driver_id':t.driver_id,'driver_name':d.name if d else None,'status':t.status,'priority':t.priority,'customer':t.customer,'customer_phone':t.customer_phone,'instructions':t.instructions,'due_at':iso(t.due_at),'assigned_at':iso(t.assigned_at),'started_at':iso(t.started_at),'completed_at':iso(t.completed_at),'proof_url':('/api/files/'+Path(t.proof_path).name) if t.proof_path else None,'otp_verified':t.otp_verified,'route_distance_km':t.route_distance_km,'route_duration_min':t.route_duration_min,'route_source':t.route_source,'route_available':bool(t.route_json and (t.route_source or '').startswith(('OSRM','TomTom'))),'route_deviation':t.route_deviation,'late_reason':t.late_reason or '','late_reason_at':iso(t.late_reason_at)}
 def expense_json(e,s):
  u=s.get(User,e.driver_id)
  return {'id':e.id,'driver_id':e.driver_id,'driver_name':u.name if u else '', 'task_id':e.task_id,'category':e.category,'amount':e.amount,'note':e.note,'status':e.status,'created_at':iso(e.created_at),'receipt_url':'/api/files/'+Path(e.receipt_path).name if e.receipt_path else None,'fraud_flags':__import__('json').loads(e.fraud_flags or '[]'),'evidence_reviewed':bool(e.evidence_reviewed),'reviewed_at':iso(e.reviewed_at)}
@@ -136,6 +137,51 @@ def line_distance_km(lat,lng,coordinates):
   dx=bx-ax;dy=by-ay;z=max(0,min(1,((x-ax)*dx+(y-ay)*dy)/(dx*dx+dy*dy))) if dx*dx+dy*dy else 0
   dist=min(dist,math.hypot(x-(ax+z*dx),y-(ay+z*dy)))
  return dist/1000
+async def tomtom_route(a,b,c,d,route_type='fastest'):
+ """Opt-in traffic-aware road routing; requires TOMTOM_API_KEY and provider terms."""
+ key=os.getenv('TOMTOM_API_KEY','').strip()
+ if not key:return None
+ url=f'https://api.tomtom.com/routing/1/calculateRoute/{a},{b}:{c},{d}/json'
+ async with httpx.AsyncClient(timeout=12) as client:
+  response=await client.get(url,params={'key':key,'traffic':'true','routeType':route_type,'maxAlternatives':2,'computeTravelTimeFor':'all'})
+  response.raise_for_status()
+  routes=response.json().get('routes',[])
+  if not routes:raise ValueError('No routes returned from traffic provider')
+  def convert(item):
+   summary=item['summary']
+   points=[point for leg in item.get('legs',[]) for point in leg.get('points',[])]
+   coords=[[float(v['longitude']),float(v['latitude'])] for v in points]
+   if len(coords)<2:raise ValueError('Traffic provider returned no road geometry')
+   return {'distance_km':round(summary['lengthInMeters']/1000,2),
+           'duration_min':round(summary['travelTimeInSeconds']/60,1),
+           'coordinates':coords,'steps':[],
+           'traffic_delay_min':round(summary.get('trafficDelayInSeconds',0)/60,1),
+           'source':'TomTom traffic-aware routing','traffic_aware':True}
+  primary=convert(routes[0]);primary['alternative_routes']=[]
+  for candidate in routes[1:]:
+   try:primary['alternative_routes'].append(convert(candidate))
+   except (ValueError,KeyError,TypeError):pass
+  return primary
+
+async def route_options(a,b,c,d,mode='fastest'):
+ if mode not in ('fastest','shortest'):err(422,'mode must be fastest or shortest')
+ if os.getenv('TOMTOM_API_KEY','').strip():
+  try:return await tomtom_route(a,b,c,d,mode)
+  except (httpx.HTTPError,ValueError,KeyError,TypeError):
+   # Fall back but never label estimated speed as current traffic.
+   pass
+ result=await route_between(a,b,c,d)
+ result['requested_mode']=mode
+ result['shortest_guaranteed']=False
+ result['notice']='Traffic data unavailable; this route does not account for live traffic.'
+ return result
+
+@app.get('/api/routing/options')
+async def routing_options(from_lat:float,from_lng:float,to_lat:float,to_lng:float,mode:str='fastest',_=Depends(manager)):
+ for lat,lng in ((from_lat,from_lng),(to_lat,to_lng)):
+  if not (-90<=lat<=90 and -180<=lng<=180):err(422,'Invalid coordinates')
+ return await route_options(from_lat,from_lng,to_lat,to_lng,mode)
+
 async def route_between(a,b,c,d):
  """OSRM public demo API for development ONLY; fallback clearly marked straight-line estimate."""
  url=f'https://router.project-osrm.org/route/v1/driving/{b},{a};{d},{c}'
@@ -148,9 +194,9 @@ async def route_between(a,b,c,d):
    for step in leg.get('steps',[]):
     maneuver=step.get('maneuver',{});street=step.get('name') or step.get('ref') or 'unnamed road'
     directions.append({'instruction':f"{maneuver.get('type','Continue').replace('_',' ').capitalize()} {maneuver.get('modifier','').replace('_',' ')} on {street}".strip(),'distance_m':round(step.get('distance',0)),'duration_sec':round(step.get('duration',0)),'location':maneuver.get('location',[])})
-  return {'distance_km':round(r['distance']/1000,2),'duration_min':round(r['duration']/60,1),'coordinates':r['geometry']['coordinates'],'steps':directions,'source':'OSRM demo road routing'}
+  return {'distance_km':round(r['distance']/1000,2),'duration_min':round(r['duration']/60,1),'coordinates':r['geometry']['coordinates'],'steps':directions,'source':'OSRM demo road routing','traffic_aware':False,'alternative_routes':[]}
  except Exception:
-  km=haversine(a,b,c,d);return {'distance_km':round(km,2),'duration_min':round(km/30*60,1),'coordinates':[[b,a],[d,c]],'steps':[],'source':'straight-line fallback (not road navigation)'}
+  km=haversine(a,b,c,d);return {'distance_km':round(km,2),'duration_min':round(km/30*60,1),'coordinates':[[b,a],[d,c]],'steps':[],'source':'straight-line fallback (not road navigation)','traffic_aware':False,'alternative_routes':[]}
 
 class Login(BaseModel):phone:str;pin:str
 class AdminLogin(BaseModel):
@@ -172,7 +218,13 @@ def valid_password(value):
 
 class DriverCreate(BaseModel):name:str;phone:str;pin:str=Field(min_length=4,max_length=12);license_no:str='';vehicle:str='';vehicle_plate:str='';language:str='en';shift_expected:str='09:00'
 class TaskCreate(BaseModel):title:str;driver_id:str;address:str;lat:float;lng:float;due_at:datetime;priority:str='normal';customer:str='';customer_phone:str='';instructions:str=''
-class Coords(BaseModel):lat:float=Field(ge=-90,le=90);lng:float=Field(ge=-180,le=180);task_id:Optional[str]=None
+class Coords(BaseModel):
+ lat:float=Field(ge=-90,le=90)
+ lng:float=Field(ge=-180,le=180)
+ task_id:Optional[str]=None
+ accuracy_m:Optional[float]=Field(default=None,ge=0,le=10000)
+ speed_mps:Optional[float]=Field(default=None,ge=0,le=150)
+ captured_at:Optional[datetime]=None
 class Punch(Coords):vehicle:str=''
 class ExpenseCreate(BaseModel):task_id:str;category:str;amount:float=Field(gt=0);note:str=''
 class SOSCreate(BaseModel):confirmed:bool;lat:Optional[float]=None;lng:Optional[float]=None;message:str='Emergency assistance requested'
@@ -369,7 +421,7 @@ async def create_task(x:TaskCreate,s:Session=Depends(db),_=Depends(manager)):
  if not -90<=x.lat<=90 or not -180<=x.lng<=180:err(400,'Invalid destination coordinates')
  t=Task(id=str(uuid.uuid4()),title=x.title,driver_id=x.driver_id,address=x.address,lat=x.lat,lng=x.lng,due_at=x.due_at,priority=x.priority,customer=x.customer,customer_phone=x.customer_phone,instructions=x.instructions,assigned_at=now())
  if u.lat is not None and u.lng is not None:
-  r=await route_between(u.lat,u.lng,x.lat,x.lng);t.route_distance_km=r['distance_km'];t.route_duration_min=r['duration_min'];t.route_source=r['source'];import json;t.route_json=json.dumps(r['coordinates'])
+  r=await route_options(u.lat,u.lng,x.lat,x.lng);t.route_distance_km=r['distance_km'];t.route_duration_min=r['duration_min'];t.route_source=r['source'];import json;t.route_json=json.dumps(r['coordinates']);t.route_alternatives_json=json.dumps([alt.get('coordinates',[]) for alt in r.get('alternative_routes',[])])
  s.add(t);s.commit();return task_json(t,s)
 @app.post('/api/tasks/{tid}/late-reason')
 def submit_late_reason(tid:str,x:LateReason,u=Depends(driver),s:Session=Depends(db)):
@@ -415,27 +467,61 @@ def start_task(tid:str,u=Depends(driver),s:Session=Depends(db)):
  if t.status!='assigned':err(409,'Task not in assigned state')
  t.status='in_progress';t.started_at=now();s.commit();return task_json(t,s)
 @app.get('/api/tasks/{tid}/route')
-async def task_route(tid:str,s:Session=Depends(db),u=Depends(require)):
+async def task_route(tid:str,mode:str='fastest',s:Session=Depends(db),u=Depends(require)):
  t=s.get(Task,tid)
  if not t or (u.role=='driver' and t.driver_id!=u.id):err(404,'Task not found')
  if u.role=='manager': d=s.get(User,t.driver_id)
  else:d=u
  if not d or d.lat is None or d.lng is None:err(400,'Driver must send GPS location first')
- return await route_between(d.lat,d.lng,t.lat,t.lng)
+ return await route_options(d.lat,d.lng,t.lat,t.lng,mode)
+# A deviation needs repeated reliable readings; avoid flooding alerts on every GPS update.
+# Existing tasks.route_deviation is persistent. In-memory confirmation counts reset on restart/scale-out.
+_deviation_samples={}
+DEVIATION_METRES=max(50,min(1000,int(os.getenv('ROUTE_DEVIATION_METRES','150'))))
+DEVIATION_CONFIRMATIONS=max(2,min(8,int(os.getenv('ROUTE_DEVIATION_CONFIRMATIONS','3'))))
+
 @app.post('/api/gps')
 def gps(x:Coords,u=Depends(driver),s:Session=Depends(db)):
  if not (u.shift_start and (not u.shift_end or naive(u.shift_start)>naive(u.shift_end))):err(409,'GPS tracking allowed during active shifts only')
- u.lat=x.lat;u.lng=x.lng;u.last_gps=now();s.add(GPS(id=str(uuid.uuid4()),driver_id=u.id,task_id=x.task_id,lat=x.lat,lng=x.lng,at=now()))
- import json
+ recorded=now()
+ if x.captured_at is not None:
+  captured=x.captured_at if x.captured_at.tzinfo else x.captured_at.replace(tzinfo=timezone.utc)
+  if captured>recorded+timedelta(minutes=2) or captured<recorded-timedelta(days=7):err(422,'GPS capture time outside accepted range')
+ else:captured=recorded
+ # Don't let delayed offline records move the driver's live marker backwards in time.
+ if not u.last_gps or naive(captured)>=naive(u.last_gps):
+  u.lat=x.lat;u.lng=x.lng;u.last_gps=captured
+ s.add(GPS(id=str(uuid.uuid4()),driver_id=u.id,task_id=x.task_id,lat=x.lat,lng=x.lng,at=recorded,accuracy_m=x.accuracy_m,speed_mps=x.speed_mps,captured_at=captured))
+ deviations=[]
+ # Ignore GPS readings with poor accuracy and replayed samples for live deviation decisions.
+ fresh=(recorded-captured).total_seconds()<90
+ accurate=x.accuracy_m is not None and x.accuracy_m<=60
  for t in s.scalars(select(Task).where(Task.driver_id==u.id,Task.status=='in_progress')):
-  if t.route_json and t.route_source.startswith('OSRM'):
-   distance=line_distance_km(x.lat,x.lng,json.loads(t.route_json))
-   if distance>0.6:
-    t.route_deviation=True;new_alert(s,'route_deviation',u.id,f'{u.name} is {distance:.1f} km off planned route',t.id,lat=x.lat,lng=x.lng)
- s.commit();return {'ok':True,'time':iso(u.last_gps)}
+  if not t.route_json or not (t.route_source or '').startswith(('OSRM','TomTom')):continue
+  try:
+   permitted=[json.loads(t.route_json)]+json.loads(t.route_alternatives_json or '[]')
+   distance_m=1000*min(line_distance_km(x.lat,x.lng,path) for path in permitted if len(path)>1)
+  except (ValueError,TypeError):continue
+  key=(u.id,t.id)
+  if not fresh or not accurate:continue
+  if distance_m>DEVIATION_METRES:
+   _deviation_samples[key]=_deviation_samples.get(key,0)+1
+   if _deviation_samples[key]>=DEVIATION_CONFIRMATIONS and not t.route_deviation:
+    t.route_deviation=True
+    new_alert(s,'route_deviation',u.id,f'{u.name} deviated {distance_m:.0f} m from the saved route (confirmed GPS)',t.id,lat=x.lat,lng=x.lng)
+    deviations.append(t.id)
+  else:
+   _deviation_samples.pop(key,None)
+   if t.route_deviation:
+    t.route_deviation=False
+    new_alert(s,'route_restored',u.id,f'{u.name} returned to the saved route',t.id,lat=x.lat,lng=x.lng)
+ s.commit()
+ return {'ok':True,'time':iso(u.last_gps),'server_time':iso(recorded),'deviation_alerts':deviations}
+
 @app.get('/api/gps/{driver_id}')
 def gps_history(driver_id:str,s:Session=Depends(db),_=Depends(manager)):
- return [{'lat':p.lat,'lng':p.lng,'at':iso(p.at),'task_id':p.task_id} for p in s.scalars(select(GPS).where(GPS.driver_id==driver_id).order_by(GPS.at.desc()).limit(300))]
+ return [{'lat':p.lat,'lng':p.lng,'at':iso(p.captured_at or p.at),'received_at':iso(p.at),'accuracy_m':p.accuracy_m,'speed_mps':p.speed_mps,'task_id':p.task_id} for p in s.scalars(select(GPS).where(GPS.driver_id==driver_id).order_by(GPS.at.desc()).limit(300))]
+
 def recipient_phone(value):
  digits=re.sub(r'[^0-9]','',value or '')
  if len(digits)==10 and digits[0] in '6789':return '+91'+digits
@@ -602,27 +688,41 @@ _geocode_last_at=0.0
 @app.get('/api/geocode/search')
 async def geocode_search(q:str, _=Depends(manager)):
  global _geocode_last_at
- import time
  q=q.strip()
- if len(q)<3 or len(q)>150:err(422,'Enter a location of 3–150 characters')
+ if len(q)<3 or len(q)>150:err(422,'Enter a location of 3-150 characters')
  cache_key=q.casefold()
  if cache_key in _geocode_cache:return {'results':_geocode_cache[cache_key]}
- # Throttle global requests to Nominatim; repeated requests return 429.
- if time.monotonic()-_geocode_last_at<1.1:err(429,'Location search rate limit; try again shortly')
+ if time.monotonic()-_geocode_last_at<0.4:err(429,'Search rate limit: try again shortly')
  _geocode_last_at=time.monotonic()
+ api_key=os.getenv('GEOAPIFY_API_KEY','').strip()
+ results=[];errors=[];seen=set()
  try:
   async with httpx.AsyncClient(timeout=12) as client:
-   if os.getenv('GEOAPIFY_API_KEY','').strip():
-    resp=await client.get('https://api.geoapify.com/v1/geocode/search',params={'text':q,'limit':8,'format':'json','apiKey':os.environ['GEOAPIFY_API_KEY']});resp.raise_for_status()
-    results=[{'label':str(v.get('formatted',''))[:240],'lat':float(v['lat']),'lng':float(v['lon'])} for v in resp.json().get('results',[]) if v.get('lat') is not None and v.get('lon') is not None]
-   else:
-    resp=await client.get('https://nominatim.openstreetmap.org/search',params={'q':q,'format':'jsonv2','limit':5},headers={'User-Agent':'KRIYA360-Demo/0.1 (contact: https://www.intprosec.com)'})
-    resp.raise_for_status()
-    results=[{'label':str(v.get('display_name',''))[:240],'lat':float(v['lat']),'lng':float(v['lon'])} for v in resp.json() if v.get('lat') and v.get('lon')]
- except Exception:err(503,'Address search service unavailable. You can still pin the map manually.')
+   if api_key:
+    # Geocoding + autocomplete. POI/building coverage is dependent on provider indexing.
+    for endpoint,params in [
+     ('https://api.geoapify.com/v1/geocode/search',{'text':q,'limit':10,'format':'json','apiKey':api_key}),
+     ('https://api.geoapify.com/v1/geocode/autocomplete',{'text':q,'limit':10,'format':'json','apiKey':api_key}),
+    ]:
+     try:
+      response=await client.get(endpoint,params=params);response.raise_for_status()
+      for item in response.json().get('results',[]):
+       if item.get('lat') is None or item.get('lon') is None:continue
+       lat,lng=float(item['lat']),float(item['lon'])
+       label=str(item.get('formatted') or item.get('name') or item.get('address_line1') or '').strip()[:240]
+       ident=(round(lat,5),round(lng,5),label.lower())
+       if not label or ident in seen:continue
+       seen.add(ident);results.append({'label':label,'lat':lat,'lng':lng,'type':item.get('result_type','place')})
+     except (httpx.HTTPError,ValueError,KeyError) as e:errors.append(type(e).__name__)
+   if not api_key:
+    response=await client.get('https://nominatim.openstreetmap.org/search',params={'q':q,'format':'jsonv2','limit':10},headers={'User-Agent':'KRIYA360/1.0 (operations search)'})
+    response.raise_for_status()
+    results=[{'label':str(v.get('display_name',''))[:240],'lat':float(v['lat']),'lng':float(v['lon'])} for v in response.json() if v.get('lat') and v.get('lon')]
+ except (httpx.HTTPError,ValueError,KeyError):err(503,'Search provider temporarily unavailable; pin the destination manually')
+ if errors and not results:err(503,'Geoapify search unsuccessful; check key, API access and backend logs')
  if len(_geocode_cache)>150:_geocode_cache.clear()
- _geocode_cache[cache_key]=results
- return {'results':results}
+ _geocode_cache[cache_key]=results[:15]
+ return {'results':results[:15]}
 
 class ManagerAccountCreate(BaseModel):
  name:str=Field(min_length=2,max_length=120)

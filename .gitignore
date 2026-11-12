@@ -56,3 +56,6 @@ android/key.properties
 *.backup.*
 *.backup.xml
 *.before_*
+
+# Temporary merge reports
+GPS_Merge_Comparison/
