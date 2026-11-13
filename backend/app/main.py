@@ -543,7 +543,10 @@ def bulk_delivery_preview(x:BulkDeliveryRequest,s:Session=Depends(db),_=Depends(
  rows=[]
  for idx,task in enumerate(x.deliveries,1):
   issues=[];d=s.get(User,task.driver_id)
-  if not d or d.role!='driver' or not d.active or not d.approved or not d.license_verified:issues.append('Driver not eligible')
+  if not d or d.role!='driver':issues.append('Driver ID not found. Export an eligible driver ID from Drivers; names, phone numbers and placeholders are not IDs.')
+  elif d.active is False:issues.append('Driver account is deactivated')
+  elif not d.approved:issues.append('Driver is pending management approval')
+  elif not d.license_verified:issues.append('Driver licence has not been verified')
   if not task.title.strip() or not task.address.strip():issues.append('Title and destination required')
   if not -90<=task.lat<=90 or not -180<=task.lng<=180:issues.append('Invalid coordinates')
   if not re.fullmatch(r'(?:[6-9][0-9]{9}|91[6-9][0-9]{9}|\+91[6-9][0-9]{9})',task.customer_phone or ''):issues.append('Recipient phone invalid')
