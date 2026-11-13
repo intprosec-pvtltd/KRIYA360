@@ -39,6 +39,31 @@ class Task(Base):
  driver_id=Column(String,ForeignKey('users.id')); status=Column(String,default='assigned'); priority=Column(String,default='normal'); customer=Column(String,default=''); customer_phone=Column(String,default='')
  instructions=Column(Text,default=''); due_at=Column(DateTime(timezone=True)); assigned_at=Column(DateTime(timezone=True)); started_at=Column(DateTime(timezone=True)); completed_at=Column(DateTime(timezone=True)); proof_path=Column(String,default=''); otp_hash=Column(String,default=''); otp_expires=Column(DateTime(timezone=True)); otp_verified=Column(Boolean,default=False); otp_attempts=Column(Integer,default=0)
  late_reason=Column(Text,default=''); late_reason_at=Column(DateTime(timezone=True)); route_json=Column(Text,default=''); route_alternatives_json=Column(Text,default='[]'); route_distance_km=Column(Float,default=0); route_duration_min=Column(Float,default=0); route_source=Column(String,default=''); route_deviation=Column(Boolean,default=False)
+class UnassignedOrder(Base):
+ """CSV-imported work awaiting an explicit manager assignment.
+ Separate from Task to preserve all existing delivery and driver workflows.
+ """
+ __tablename__='unassigned_orders'
+ id=Column(String,primary_key=True)
+ order_reference=Column(String,nullable=False,unique=True,index=True)
+ title=Column(String,nullable=False)
+ pickup_address=Column(String,nullable=False); pickup_lat=Column(Float,nullable=False); pickup_lng=Column(Float,nullable=False)
+ delivery_address=Column(String,nullable=False); delivery_lat=Column(Float,nullable=False); delivery_lng=Column(Float,nullable=False)
+ customer_name=Column(String,nullable=False); customer_phone=Column(String,nullable=False)
+ due_at=Column(DateTime(timezone=True),nullable=False); priority=Column(String,default='normal')
+ vehicle_type=Column(String,default=''); instructions=Column(Text,default='')
+ status=Column(String,nullable=False,default='unassigned',index=True)
+ created_at=Column(DateTime(timezone=True),nullable=False); created_by=Column(String,nullable=False)
+ assigned_at=Column(DateTime(timezone=True)); assigned_by=Column(String); assigned_driver_id=Column(String,ForeignKey('users.id')); task_id=Column(String,ForeignKey('tasks.id'))
+class OrderAssignmentAudit(Base):
+ __tablename__='order_assignment_audit'
+ id=Column(String,primary_key=True)
+ order_id=Column(String,ForeignKey('unassigned_orders.id'),nullable=False)
+ driver_id=Column(String,ForeignKey('users.id'),nullable=False)
+ manager_id=Column(String,ForeignKey('users.id'),nullable=False)
+ task_id=Column(String,ForeignKey('tasks.id'),nullable=False)
+ at=Column(DateTime(timezone=True),nullable=False)
+
 class GPS(Base):
  __tablename__='gps'
  id=Column(String,primary_key=True); driver_id=Column(String,ForeignKey('users.id')); task_id=Column(String); lat=Column(Float); lng=Column(Float); at=Column(DateTime(timezone=True)); accuracy_m=Column(Float); speed_mps=Column(Float); captured_at=Column(DateTime(timezone=True)); sample_id=Column(String)
@@ -1191,3 +1216,141 @@ def attendance_pdf(driver_id:Optional[str]=None,start:Optional[str]=None,end:Opt
  table.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),colors.HexColor('#092148')),('TEXTCOLOR',(0,0),(-1,0),colors.white),('FONTNAME',(0,0),(-1,0),'Helvetica-Bold'),('FONTNAME',(0,1),(-1,-1),'Helvetica'),('FONTSIZE',(0,0),(-1,-1),8),('BOTTOMPADDING',(0,0),(-1,-1),8),('TOPPADDING',(0,0),(-1,-1),8),('ROWBACKGROUNDS',(0,1),(-1,-1),[colors.white,colors.HexColor('#f2f6fb')]),('LINEBELOW',(0,0),(-1,0),1,colors.HexColor('#f47a20'))]))
  elements.extend([table,Spacer(1,12),Paragraph('Attendance and GPS are driver-device-reported. Missing punch-ins require an approved shift roster and leave records to determine absences.',styles['SmallKriya'])])
  doc.build(elements);return Response(content=out.getvalue(),media_type='application/pdf',headers={'Content-Disposition':'attachment; filename="KRIYA360_attendance.pdf"'})
+
+# ------------------- Intelligent order allocation V1 -------------------
+# These routes are additive. Older /api/tasks and /api/tasks/bulk-* remain intact.
+class OrderImportRow(BaseModel):
+ order_reference:str; title:str; pickup_address:str; pickup_lat:float; pickup_lng:float
+ delivery_address:str; delivery_lat:float; delivery_lng:float
+ customer_name:str; customer_phone:str; due_at:datetime; priority:str='normal'
+ vehicle_type:str=''; instructions:str=''
+class OrderBatch(BaseModel):
+ orders:list[OrderImportRow]=Field(min_length=1,max_length=100)
+class OrderDriverAssignment(BaseModel):
+ driver_id:str
+
+def order_view(o):
+ return {'id':o.id,'order_reference':o.order_reference,'title':o.title,
+         'pickup_address':o.pickup_address,'pickup_lat':o.pickup_lat,'pickup_lng':o.pickup_lng,
+         'delivery_address':o.delivery_address,'delivery_lat':o.delivery_lat,'delivery_lng':o.delivery_lng,
+         'customer_name':o.customer_name,'customer_phone':o.customer_phone,'due_at':iso(o.due_at),
+         'priority':o.priority,'vehicle_type':o.vehicle_type or '', 'instructions':o.instructions or '',
+         'status':o.status,'created_at':iso(o.created_at),'assigned_at':iso(o.assigned_at),
+         'assigned_driver_id':o.assigned_driver_id,'task_id':o.task_id}
+
+def order_errors(item,existing_refs,seen):
+ errors=[];ref=item.order_reference.strip().upper()
+ if not re.fullmatch(r'[A-Z0-9][A-Z0-9_\-]{1,63}',ref):errors.append('Order reference must be 2-64 letters, digits, underscores or hyphens')
+ if ref in seen:errors.append('Duplicate order reference in this CSV')
+ if ref in existing_refs:errors.append('Order reference already imported')
+ if not item.title.strip() or len(item.title)>160:errors.append('Delivery title required (maximum 160 characters)')
+ if not item.pickup_address.strip() or not item.delivery_address.strip():errors.append('Pickup and delivery addresses required')
+ for tag,lat,lng in [('Pickup',item.pickup_lat,item.pickup_lng),('Destination',item.delivery_lat,item.delivery_lng)]:
+  if not all(math.isfinite(v) for v in (lat,lng)) or not (-90<=lat<=90 and -180<=lng<=180):errors.append(tag+' coordinates invalid')
+ if not item.customer_name.strip():errors.append('Customer name required')
+ if not re.fullmatch(r'(?:[6-9][0-9]{9}|91[6-9][0-9]{9}|\+91[6-9][0-9]{9})',item.customer_phone):errors.append('Customer phone must be an Indian mobile number')
+ if item.priority.lower() not in ('normal','high','critical','urgent'):errors.append('Priority must be normal, high, urgent or critical')
+ if item.vehicle_type and item.vehicle_type.lower() not in ('truck','lorry','heavy truck','container truck'):errors.append('Unsupported vehicle type')
+ if naive(item.due_at)<=naive(now()):errors.append('Deadline must be in the future')
+ return errors
+
+def validate_order_batch(x,s):
+ refs=set(s.scalars(select(UnassignedOrder.order_reference)))
+ rows=[];seen=set()
+ for i,item in enumerate(x.orders,1):
+  errors=order_errors(item,refs,seen)
+  seen.add(item.order_reference.strip().upper())
+  rows.append({'row':i,'order_reference':item.order_reference,'title':item.title,'valid':not errors,'errors':errors})
+ return {'total':len(rows),'valid':sum(r['valid'] for r in rows),'invalid':sum(not r['valid'] for r in rows),'rows':rows}
+
+@app.post('/api/orders/bulk-preview')
+def preview_orders(x:OrderBatch,s:Session=Depends(db),_=Depends(manager)):
+ return validate_order_batch(x,s)
+
+@app.post('/api/orders/bulk-import',status_code=201)
+def import_orders(x:OrderBatch,s:Session=Depends(db),u=Depends(manager)):
+ preview=validate_order_batch(x,s)
+ if preview['invalid']:err(422,'Batch contains invalid or duplicate orders. Correct every row before import')
+ ids=[]
+ for item in x.orders:
+  row=UnassignedOrder(id=str(uuid.uuid4()),order_reference=item.order_reference.strip().upper(),title=item.title.strip(),
+   pickup_address=item.pickup_address.strip(),pickup_lat=item.pickup_lat,pickup_lng=item.pickup_lng,
+   delivery_address=item.delivery_address.strip(),delivery_lat=item.delivery_lat,delivery_lng=item.delivery_lng,
+   customer_name=item.customer_name.strip(),customer_phone=item.customer_phone.strip(),due_at=item.due_at,
+   priority=item.priority.lower(),vehicle_type=item.vehicle_type.strip(),instructions=item.instructions.strip(),
+   status='unassigned',created_by=u.id,created_at=now())
+  s.add(row);ids.append(row.id)
+ try:s.commit()
+ except Exception:
+  s.rollback();err(409,'One or more order references already exist. Refresh the preview')
+ return {'imported':len(ids),'order_ids':ids,'status':'unassigned','assigned':0}
+
+@app.get('/api/orders')
+def list_orders(status:str='all',s:Session=Depends(db),_=Depends(manager)):
+ if status not in ('all','unassigned','assigned'):err(422,'Invalid status')
+ q=select(UnassignedOrder).order_by(UnassignedOrder.created_at.desc()).limit(500)
+ if status!='all':q=q.where(UnassignedOrder.status==status)
+ return [order_view(o) for o in s.scalars(q)]
+
+def eligible_for_order(d,order):
+ if d.role!='driver' or d.active is False or not d.approved or not d.license_verified:return False
+ if order.vehicle_type and (d.vehicle or '').casefold()!=order.vehicle_type.casefold():return False
+ return True
+
+def driver_recommendations(order,s):
+ candidates=[]
+ for d in s.scalars(select(User).where(User.role=='driver')):
+  if not eligible_for_order(d,order):continue
+  tasks=list(s.scalars(select(Task).where(Task.driver_id==d.id,Task.status.in_(['assigned','in_progress']))))
+  current=next((t for t in tasks if t.status=='in_progress'),None)
+  queued=sum(t.status=='assigned' for t in tasks)
+  on_shift=bool(d.shift_start and (not d.shift_end or naive(d.shift_start)>naive(d.shift_end)))
+  age=(now()-d.last_gps.replace(tzinfo=timezone.utc) if d.last_gps and d.last_gps.tzinfo is None else now()-d.last_gps).total_seconds() if d.last_gps else None
+  gps_fresh=age is not None and 0<=age<=120
+  # Driver's live position is NOT a credible pickup origin when GPS is stale.
+  # After an active delivery, use its destination as a planning hint, not a live location.
+  origin_lat,origin_lng=(d.lat,d.lng) if gps_fresh and d.lat is not None and d.lng is not None else (None,None)
+  source='fresh_gps' if origin_lat is not None else 'unavailable'
+  if current and not gps_fresh:
+   origin_lat,origin_lng=current.lat,current.lng;source='current_delivery_destination_estimate'
+  distance=round(haversine(origin_lat,origin_lng,order.pickup_lat,order.pickup_lng),2) if origin_lat is not None else None
+  # Ranking heuristic, not AI prediction or live-traffic ETA. Never invent road metrics.
+  score=(0 if on_shift else 100)+(0 if gps_fresh else 40)+(distance if distance is not None else 100)+queued*15+(20 if current else 0)
+  reasons=[('On shift' if on_shift else 'Off shift'),('Fresh GPS' if gps_fresh else 'GPS unavailable or stale'),f'{queued} queued task(s)']
+  if current:reasons.append('Active delivery: '+current.title)
+  candidates.append({'driver_id':d.id,'name':d.name,'phone':d.phone,'vehicle':d.vehicle,
+   'on_shift':on_shift,'gps_fresh':gps_fresh,'location_source':source,
+   'distance_to_pickup_km':distance,'distance_type':'straight_line_estimate',
+   'active_task':current.title if current else None,'queued_tasks':queued,
+   'reasons':reasons,'score':round(score,2),'lat':origin_lat,'lng':origin_lng})
+ candidates.sort(key=lambda x:(x['score'],x['name']))
+ return candidates[:10]
+
+@app.get('/api/orders/{order_id}/recommendations')
+def recommend_order(order_id:str,s:Session=Depends(db),_=Depends(manager)):
+ o=s.get(UnassignedOrder,order_id)
+ if not o:err(404,'Order not found')
+ if o.status!='unassigned':err(409,'Order already assigned')
+ return {'order_id':o.id,'recommendations':driver_recommendations(o,s)[:3],
+         'ranking_method':'heuristic: shift, GPS freshness, pickup straight-line distance, current and queued tasks',
+         'traffic_aware':False}
+
+@app.post('/api/orders/{order_id}/assign',status_code=201)
+def assign_order(order_id:str,x:OrderDriverAssignment,s:Session=Depends(db),u=Depends(manager)):
+ # PostgreSQL row lock ensures two managers cannot assign the same order concurrently.
+ # SQLite serializes writes at DB level, and is intended for local testing only.
+ o=s.scalar(select(UnassignedOrder).where(UnassignedOrder.id==order_id).with_for_update())
+ if not o:err(404,'Order not found')
+ if o.status!='unassigned':err(409,'This order is already assigned')
+ d=s.get(User,x.driver_id)
+ if not d or not eligible_for_order(d,o):err(409,'Selected driver is not active, approved, licence-verified or vehicle-compatible')
+ t=Task(id=str(uuid.uuid4()),title=o.title,address=o.delivery_address,lat=o.delivery_lat,lng=o.delivery_lng,
+  driver_id=d.id,status='assigned',priority=('critical' if o.priority=='urgent' else o.priority),
+  customer=o.customer_name,customer_phone=o.customer_phone,instructions=(f'Pickup: {o.pickup_address}. '+(o.instructions or '')),
+  due_at=o.due_at,assigned_at=now())
+ s.add(t);o.status='assigned';o.task_id=t.id;o.assigned_driver_id=d.id;o.assigned_by=u.id;o.assigned_at=now()
+ s.add(OrderAssignmentAudit(id=str(uuid.uuid4()),order_id=o.id,driver_id=d.id,manager_id=u.id,task_id=t.id,at=now()))
+ try:s.commit()
+ except Exception:
+  s.rollback();err(409,'Assignment conflict. Refresh the order before retrying')
+ return {'order':order_view(o),'task':task_json(t,s),'message':'Driver assigned by manager; task queued'}
