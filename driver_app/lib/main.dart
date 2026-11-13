@@ -115,22 +115,27 @@ class PendingDriverPage extends StatefulWidget{
 class _PendingDriverPageState extends State<PendingDriverPage>{
  final picker=ImagePicker();bool busy=false;bool consent=false;
  Future<void> uploadLicense(ImageSource source)async{
-  if(!consent){toast(context,'Consent is needed before submitting your driving licence proof');return;}
+  if(!consent){toast(context,'Please consent before submitting your driving licence');return;}
   final photo=await picker.pickImage(source:source,imageQuality:85);
   if(photo==null)return;
-  setState(()=>busy=true);
+  if(mounted)setState(()=>busy=true);
   try{
-   // Enrol from live camera during mandatory licence onboarding.
-   // A gallery image is never used as the biometric reference.
-   if(widget.user['face_enrolled']!=true||widget.user['face_review_status']=='rejected'){
-    final face=await picker.pickImage(source:ImageSource.camera,imageQuality:85,preferredCameraDevice:CameraDevice.front);
-    if(face==null){if(mounted)toast(context,'Face photo required. Licence was not submitted.');return;}
-    await api.call('/onboarding/face',method:'POST',photo:face.path);
-   }
    await api.call('/onboarding/license',method:'POST',photo:photo.path);
    await widget.onRefresh();
-   if(mounted)toast(context,'Licence proof submitted. Management approval is required before you can use the app.');
-  }catch(e){if(mounted)toast(context,'Upload failed: $e');}
+   if(mounted)toast(context,'Licence uploaded. Capture your face separately to complete enrolment.');
+  }catch(e){if(mounted)toast(context,'Licence upload failed: $e');}
+  finally{if(mounted)setState(()=>busy=false);}
+ }
+ Future<void> uploadEnrollmentFace()async{
+  if(!consent){toast(context,'Please consent before submitting biometric enrolment evidence');return;}
+  final photo=await picker.pickImage(source:ImageSource.camera,imageQuality:85,preferredCameraDevice:CameraDevice.front);
+  if(photo==null)return;
+  if(mounted)setState(()=>busy=true);
+  try{
+   await api.call('/onboarding/face',method:'POST',photo:photo.path);
+   await widget.onRefresh();
+   if(mounted)toast(context,'Face photo uploaded for manager review. Biometric matching is not active.');
+  }catch(e){if(mounted)toast(context,'Face upload failed: $e');}
   finally{if(mounted)setState(()=>busy=false);}
  }
  @override Widget build(BuildContext context){
@@ -184,7 +189,7 @@ class _PendingDriverPageState extends State<PendingDriverPage>{
        value:consent,
        contentPadding:EdgeInsets.zero,
        onChanged:(v)=>setState(()=>consent=v??false),
-       title:const Text('I consent to sharing my driving licence for restricted management verification.'),
+       title:const Text('I consent to secure review of my driving licence and face enrolment photo.'),
       ),
       const SizedBox(height:4),
       Row(children:[
@@ -192,7 +197,15 @@ class _PendingDriverPageState extends State<PendingDriverPage>{
       ]),
       const SizedBox(height:10),
       if(canUpload)Center(child:TextButton.icon(onPressed:busy?null:()=>uploadLicense(ImageSource.camera),icon:const Icon(Icons.camera_alt_outlined),label:const Text('Take photo instead')))
-      else Center(child:Text(status=='pending'?'Upload locked until manager review.':'Approved drivers can continue after signing in again.',style:const TextStyle(color:Colors.blueGrey),textAlign:TextAlign.center)),
+      else Center(child:Text(status=='pending'?'Licence submitted; awaiting manager review.':'Licence is already approved.',style:const TextStyle(color:Colors.blueGrey),textAlign:TextAlign.center)),
+      const SizedBox(height:20),
+      const Divider(),
+      const SizedBox(height:8),
+      const Text('Face Photo — Required',style:TextStyle(color:navy,fontWeight:FontWeight.w800,fontSize:16)),
+      const SizedBox(height:6),
+      Text(widget.user['face_review_status']=='approved'?'Face photo approved':widget.user['face_enrolled']==true&&widget.user['face_review_status']!='rejected'?'Face photo submitted; awaiting manager review':'Take a live face photo with the front camera. Gallery images are not accepted.',style:const TextStyle(color:Colors.blueGrey)),
+      const SizedBox(height:10),
+      FilledButton.icon(onPressed:busy||(widget.user['face_enrolled']==true&&widget.user['face_review_status']!='rejected')?null:uploadEnrollmentFace,icon:const Icon(Icons.face_outlined),label:Text(widget.user['face_review_status']=='rejected'?'Retake face photo':'Capture face photo')),
     ])),
     const SizedBox(height:18),
     OutlinedButton.icon(

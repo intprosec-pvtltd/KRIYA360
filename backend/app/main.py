@@ -877,6 +877,32 @@ def update_alerts(s):
 # keep requests low. For production use a contracted geocoding provider.
 _geocode_cache={}
 _geocode_last_at=0.0
+# Resolve display names without exposing location-service credentials to browsers.
+# Only reverse geocode explicitly selected fleet positions (not every poll).
+_reverse_names_cache={}
+@app.get('/api/geocode/reverse')
+async def reverse_geocode(lat:float,lng:float,_=Depends(manager)):
+ if not (-90<=lat<=90 and -180<=lng<=180) or not (math.isfinite(lat) and math.isfinite(lng)):
+  err(422,'Invalid coordinates')
+ key=os.getenv('GEOAPIFY_API_KEY','').strip()
+ if not key:return {'name':None,'available':False}
+ cache_key=(round(lat,4),round(lng,4))
+ current=time.time()
+ cached=_reverse_names_cache.get(cache_key)
+ if cached and current-cached[0]<3600:return {'name':cached[1],'available':bool(cached[1])}
+ try:
+  async with httpx.AsyncClient(timeout=8.0) as client:
+   resp=await client.get('https://api.geoapify.com/v1/geocode/reverse',params={'lat':lat,'lon':lng,'apiKey':key,'format':'json','limit':1})
+   resp.raise_for_status()
+   results=resp.json().get('results') or []
+   row=results[0] if results else {}
+   name=(row.get('formatted') or row.get('address_line1') or row.get('city') or '').strip() or None
+   if len(_reverse_names_cache)>1000:_reverse_names_cache.clear()
+   _reverse_names_cache[cache_key]=(current,name)
+   return {'name':name,'available':bool(name)}
+ except (httpx.HTTPError,ValueError):
+  return {'name':None,'available':False}
+
 @app.get('/api/geocode/search')
 async def geocode_search(q:str, _=Depends(manager)):
  global _geocode_last_at

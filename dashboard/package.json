@@ -1,1 +1,22 @@
-{"name":"kriya360-management","version":"0.1.0","private":true,"type":"module","scripts":{"dev":"vite --host 0.0.0.0","build":"vite build","preview":"vite preview"},"dependencies":{"@vitejs/plugin-react":"^4.4.1","vite":"^5.4.20","react":"^18.3.1","react-dom":"^18.3.1","lucide-react":"^0.468.0","leaflet":"^1.9.4","react-leaflet":"^4.2.1"},"devDependencies":{}}
+{
+  "name": "kriya360-management",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^4.4.1",
+    "vite": "^5.4.20",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "lucide-react": "^0.468.0",
+    "leaflet": "^1.9.4",
+    "react-leaflet": "^4.2.1",
+    "react-hot-toast": "^2.6.0"
+  },
+  "devDependencies": {}
+}
