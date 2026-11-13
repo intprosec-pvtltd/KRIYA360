@@ -420,7 +420,7 @@ function Login({onLogin}){
  const[email,Eml]=useState(''),[password,Pwd]=useState(''),[err,E]=useState(''),[busy,B]=useState(false);
  async function submit(e){e.preventDefault();B(true);E('');try{
   const x=await request('/auth/admin/login',{method:'POST',body:JSON.stringify({email,password})});
-  if(x.user.role!=='manager')throw Error('Manager account required');onLogin(x)
+  if(!['manager','super_admin'].includes(x.user.role))throw Error('Management account required');onLogin(x)
  }catch(ex){E(ex.message)}finally{B(false)}}
  return <div className="login-wrap"><div className="login-panel"><img src="/login-product-logo.png" className="login-logo" alt="KRIYA360"/><div className="eyebrow">OPERATIONS MANAGEMENT PLATFORM</div><h1>Everything in motion.<br/><span>Everything under control.</span></h1><p>Manage on-field teams with real-time visibility, attendance and delivery tracking.</p><div className="login-benefits"><div><MapPinned/> Real-time fleet visibility</div><div><ShieldCheck/> Verified delivery proofs</div><div><Activity/> Actionable operations insights</div></div></div>
  <form onSubmit={submit} className="login-form"><div className="circle-icon"><LockKeyhole/></div><h2>Welcome back</h2><p>Sign in with your management email and password</p>
