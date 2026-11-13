@@ -1,28 +1,19 @@
-"""Office geofence regression tests; no production DB or credentials required."""
-import math
+"""Attendance classification regression tests, no shared DB mutations."""
 import pytest
 from fastapi import HTTPException
-from app.main import Punch, office_distance_m, office_attendance_policy, enforce_office_punch
+from app import main as m
 
-def test_office_policy_default_disabled(monkeypatch):
-    monkeypatch.delenv('OFFICE_GEOFENCE_ENABLED',raising=False)
-    assert office_attendance_policy()=={'enabled':False}
-    enforce_office_punch(Punch(lat=0,lng=0))
+def test_office_and_remote(monkeypatch):
+    monkeypatch.setattr(m,'office_attendance_policy',lambda s: {'configured':True,'enabled':True,'lat':13.0,'lng':77.6,'radius_m':150,'max_accuracy_m':75})
+    assert m.classify_attendance(m.Punch(lat=13.0,lng=77.6,accuracy_m=10),object())[0]=='office'
+    kind,distance=m.classify_attendance(m.Punch(lat=13.01,lng=77.6,accuracy_m=10),object())
+    assert kind=='remote' and distance>1000
 
-def test_office_policy_must_be_configured(monkeypatch):
-    monkeypatch.setenv('OFFICE_GEOFENCE_ENABLED','true')
-    monkeypatch.delenv('OFFICE_LATITUDE',raising=False)
-    monkeypatch.delenv('OFFICE_LONGITUDE',raising=False)
-    with pytest.raises(HTTPException) as exc:office_attendance_policy()
-    assert exc.value.status_code==503
+def test_poor_gps_is_rejected(monkeypatch):
+    monkeypatch.setattr(m,'office_attendance_policy',lambda s: {'configured':True,'enabled':True,'lat':13.0,'lng':77.6,'radius_m':150,'max_accuracy_m':75})
+    with pytest.raises(HTTPException) as ex:m.classify_attendance(m.Punch(lat=13.0,lng=77.6,accuracy_m=95),object())
+    assert ex.value.status_code==422
 
-def test_office_boundary_and_accuracy(monkeypatch):
-    for key,value in {'OFFICE_GEOFENCE_ENABLED':'true','OFFICE_LATITUDE':'12.9716','OFFICE_LONGITUDE':'77.5946','OFFICE_RADIUS_METERS':'150','OFFICE_MAX_GPS_ACCURACY_METERS':'75'}.items():monkeypatch.setenv(key,value)
-    enforce_office_punch(Punch(lat=12.9716,lng=77.5946,accuracy_m=12))
-    with pytest.raises(HTTPException) as missing:enforce_office_punch(Punch(lat=12.9716,lng=77.5946))
-    assert missing.value.status_code==422
-    with pytest.raises(HTTPException) as outside:enforce_office_punch(Punch(lat=12.9800,lng=77.5946,accuracy_m=10))
-    assert outside.value.status_code==403
-    with pytest.raises(HTTPException) as poor:enforce_office_punch(Punch(lat=12.9716,lng=77.5946,accuracy_m=100))
-    assert poor.value.status_code==422
-    assert office_distance_m(12.9716,77.5946,12.9716,77.5946)==0
+def test_unconfigured_does_not_invent_office(monkeypatch):
+    monkeypatch.setattr(m,'office_attendance_policy',lambda s: {'enabled':False})
+    assert m.classify_attendance(m.Punch(lat=13.0,lng=77.6),object())[0]=='unclassified'

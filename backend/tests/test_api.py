@@ -88,7 +88,8 @@ def test_manager_onboarding_review_crud_and_late_reason():
  assert c.get('/api/driver/notifications',headers=h).status_code==403
  im=Image.new('RGB',(64,64),'blue');b=BytesIO();im.save(b,'PNG');raw=b.getvalue()
  assert c.post('/api/onboarding/license',files={'image':('license.png',raw,'image/png')},headers=h).status_code==200
- assert c.post('/api/onboarding/face',files={'image':('face.png',raw,'image/png')},headers=h).status_code==400
+ assert c.post('/api/onboarding/face',files={'image':('face.png',raw,'image/png')},headers=h).status_code==200
+ assert c.patch(f'/api/drivers/{uid}/face-review',json={'approved':True},headers=m).status_code==200
  assert c.post('/api/onboarding/license',files={'image':('license.png',raw,'image/png')},headers=h).status_code==409
  assert c.get('/api/onboarding/status',headers=h).json()['license_status']=='pending'
  rejected=c.patch(f'/api/drivers/{uid}/approval',json={'approved':False,'review_note':'Incorrect document number'},headers=m)
@@ -129,6 +130,12 @@ def test_management_crud_and_geocode():
  assert c.get('/api/management/users',headers=d).status_code==403
  assert c.post('/api/management/users',headers=d,json={'name':'Unauthorized','phone':'9876543210','pin':'4321'}).status_code==403
  r=c.post('/api/management/users',headers=m,json={'name':'Second Manager','phone':'9876543210','email':'second@example.test','password':'SecondManagerStrong12'})
+ assert r.status_code==403,r.text  # Managers cannot create other managers
+ from app.main import SessionLocal,User
+ with SessionLocal() as session:
+  admin=session.get(User,'manager-demo');admin.role='super_admin';session.commit()
+ m=auth('9000000000')
+ r=c.post('/api/management/users',headers=m,json={'name':'Second Manager','phone':'9876543210','email':'second@example.test','password':'SecondManagerStrong12'})
  assert r.status_code==200,r.text
  uid=r.json()['id']
  assert c.patch('/api/management/users/'+uid,headers=m,json={'name':'New Manager','phone':'9876543210'}).status_code==200
@@ -144,6 +151,8 @@ def test_management_crud_and_geocode():
   r=c.get('/api/geocode/search?q=Whitefield%20Bengaluru',headers=m)
  assert r.status_code==200,r.text
  assert len(r.json()['results'])==1
+ with SessionLocal() as session:
+  admin=session.get(User,'manager-demo');admin.role='manager';session.commit()
 
 def test_attendance_report_and_csv_download():
  m=auth('9000000000')

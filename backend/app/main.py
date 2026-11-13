@@ -50,7 +50,7 @@ class Alert(Base):
  id=Column(String,primary_key=True); kind=Column(String); severity=Column(String,default='warning'); driver_id=Column(String); task_id=Column(String); message=Column(String); status=Column(String,default='open'); at=Column(DateTime(timezone=True)); lat=Column(Float); lng=Column(Float)
 class Attendance(Base):
  __tablename__='attendance'
- id=Column(String,primary_key=True); driver_id=Column(String); kind=Column(String); at=Column(DateTime(timezone=True)); lat=Column(Float); lng=Column(Float); vehicle=Column(String,default='')
+ id=Column(String,primary_key=True); driver_id=Column(String); kind=Column(String); at=Column(DateTime(timezone=True)); lat=Column(Float); lng=Column(Float); vehicle=Column(String,default=''); attendance_type=Column(String,default='office'); distance_from_office_m=Column(Float); gps_accuracy_m=Column(Float); verification_state=Column(String,default='not_configured')
 class OfficeGeofence(Base):
  """Single authoritative office attendance location, managed from the dashboard."""
  __tablename__='office_geofence'
@@ -75,6 +75,7 @@ with engine.begin() as connection:
  for table, additions in {
   'users': {'last_gps_received_at':'TIMESTAMP','email':'VARCHAR','password_hash':'VARCHAR','pin_change_required':'BOOLEAN DEFAULT 0','shift_end_expected':"VARCHAR DEFAULT '18:00'",'license_path':'VARCHAR','license_verified':'BOOLEAN DEFAULT 0','license_review_note':"VARCHAR DEFAULT ''",'license_inspected_at':'DATETIME','license_inspected_by':"VARCHAR DEFAULT ''",'active':'BOOLEAN DEFAULT 1','face_review_status':"VARCHAR DEFAULT 'not_submitted'",'face_review_note':"VARCHAR DEFAULT ''"},
   'tasks': {'route_alternatives_json':"TEXT DEFAULT '[]'",'late_reason':"TEXT DEFAULT ''",'late_reason_at':'DATETIME','otp_attempts':'INTEGER DEFAULT 0'},
+  'attendance': {'attendance_type':"VARCHAR DEFAULT 'office'",'distance_from_office_m':'FLOAT','gps_accuracy_m':'FLOAT','verification_state':"VARCHAR DEFAULT 'not_configured'"},
   'gps': {'accuracy_m':'FLOAT','speed_mps':'FLOAT','captured_at':'TIMESTAMP','sample_id':'VARCHAR'},
   'expenses': {'evidence_sha':'VARCHAR','evidence_visual':'VARCHAR','fraud_flags':"TEXT DEFAULT '[]'",'evidence_reviewed':'BOOLEAN DEFAULT 0','reviewed_at':'DATETIME'}
  }.items():
@@ -105,7 +106,10 @@ def require(authorization:Optional[str]=Header(None),s:Session=Depends(db)):
  if u.role=='driver' and not u.license_verified:err(403,'Driving licence verification required before driver access')
  return u
 def manager(u=Depends(require)):
- if u.role!='manager':err(403,'Manager only')
+ if u.role not in ('manager','super_admin'):err(403,'Management access required')
+ return u
+def super_admin(u=Depends(require)):
+ if u.role!='super_admin':err(403,'Super admin access required')
  return u
 def driver(u=Depends(require)):
  if u.role!='driver':err(403,'Driver only')
@@ -126,7 +130,7 @@ def license_status(u):
 def license_upload_locked(u):
  return license_status(u) in ('pending','approved')
 
-def safe_user(u):return {'id':u.id,'role':u.role,'name':u.name,'phone':u.phone,'email':u.email if u.role=='manager' else None,'language':u.language,'license_no':u.license_no,'vehicle':u.vehicle,'vehicle_plate':u.vehicle_plate,'face_enrolled':bool(u.face_path),'face_review_status':('approved' if u.face_review_status=='approved' else 'rejected' if u.face_review_status=='rejected' else 'pending' if u.face_path else 'not_submitted'),'face_review_note':u.face_review_note or '', 'face_url':'/api/files/'+Path(u.face_path).name if u.face_path else None,'license_url':'/api/files/'+Path(u.license_path).name if u.license_path else None,'approved':u.approved,'active':u.active is not False,'license_verified':bool(u.license_verified),'license_review_note':u.license_review_note or '','license_status':license_status(u),'license_inspected_at':iso(u.license_inspected_at),'on_shift':bool(u.shift_start and (not u.shift_end or naive(u.shift_start)>naive(u.shift_end))),'lat':u.lat,'lng':u.lng,'last_gps':iso(u.last_gps),'shift_expected':u.shift_expected,'shift_end_expected':u.shift_end_expected,'pin_change_required':bool(u.pin_change_required)}
+def safe_user(u):return {'id':u.id,'role':u.role,'name':u.name,'phone':u.phone,'email':u.email if u.role in ('manager','super_admin') else None,'language':u.language,'license_no':u.license_no,'vehicle':u.vehicle,'vehicle_plate':u.vehicle_plate,'face_enrolled':bool(u.face_path),'face_review_status':('approved' if u.face_review_status=='approved' else 'rejected' if u.face_review_status=='rejected' else 'pending' if u.face_path else 'not_submitted'),'face_review_note':u.face_review_note or '', 'face_url':'/api/files/'+Path(u.face_path).name if u.face_path else None,'license_url':'/api/files/'+Path(u.license_path).name if u.license_path else None,'approved':u.approved,'active':u.active is not False,'license_verified':bool(u.license_verified),'license_review_note':u.license_review_note or '','license_status':license_status(u),'license_inspected_at':iso(u.license_inspected_at),'on_shift':bool(u.shift_start and (not u.shift_end or naive(u.shift_start)>naive(u.shift_end))),'lat':u.lat,'lng':u.lng,'last_gps':iso(u.last_gps),'shift_expected':u.shift_expected,'shift_end_expected':u.shift_end_expected,'pin_change_required':bool(u.pin_change_required)}
 def task_json(t,s):
  d=s.get(User,t.driver_id) if t.driver_id else None
  return {'id':t.id,'title':t.title,'address':t.address,'lat':t.lat,'lng':t.lng,'driver_id':t.driver_id,'driver_name':d.name if d else None,'status':t.status,'priority':t.priority,'customer':t.customer,'customer_phone':t.customer_phone,'instructions':t.instructions,'due_at':iso(t.due_at),'assigned_at':iso(t.assigned_at),'started_at':iso(t.started_at),'completed_at':iso(t.completed_at),'proof_url':('/api/files/'+Path(t.proof_path).name) if t.proof_path else None,'otp_verified':t.otp_verified,'route_distance_km':t.route_distance_km,'route_duration_min':t.route_duration_min,'route_source':t.route_source,'route_available':bool(t.route_json and (t.route_source or '').startswith(('OSRM','TomTom'))),'route_deviation':t.route_deviation,'late_reason':t.late_reason or '','late_reason_at':iso(t.late_reason_at)}
@@ -287,7 +291,7 @@ def login(x:Login,s:Session=Depends(db)):
 @app.post('/api/auth/admin/login')
 def admin_login(x:AdminLogin,s:Session=Depends(db)):
  email=normalized_email(x.email)
- u=s.scalar(select(User).where(User.email==email,User.role=='manager'))
+ u=s.scalar(select(User).where(User.email==email,User.role.in_(['manager','super_admin'])))
  if not u or not u.password_hash or not check_pin(x.password,u.password_hash):err(401,'Invalid admin email or password')
  if not u.active:err(403,'Account suspended')
  return {'access_token':token(u),'user':safe_user(u)}
@@ -330,7 +334,13 @@ def onboarding_status(u=Depends(onboarding_user)):return safe_user(u)
 
 @app.post('/api/onboarding/{kind}')
 async def onboarding_upload(kind:str,image:UploadFile=File(...),u=Depends(onboarding_user),s:Session=Depends(db)):
- if kind!='license':err(400,'Only driving licence upload is required here')
+ if kind not in ('license','face'):err(400,'Upload a driving licence or live face photograph')
+ if kind=='face':
+  if u.face_path and u.face_review_status!='rejected':err(409,'Face photo already submitted for review')
+  path=await store_image(image)
+  u.face_path=str(path);u.face_review_status='pending';u.face_review_note='Awaiting manager review of live camera enrolment'
+  s.commit()
+  return {'kind':'face','uploaded':True,'face_review_status':'pending','biometric_verified':False}
  if license_upload_locked(u):err(409,'Licence proof already submitted. Wait for manager review before uploading again.')
  path=await store_image(image)
  u.license_path=str(path);u.license_verified=False;u.approved=False;u.license_inspected_at=None;u.license_inspected_by='';u.license_review_note='Licence proof uploaded and awaiting management review'
@@ -342,6 +352,7 @@ def driver_approval(uid:str,x:DriverReview,s:Session=Depends(db),_=Depends(manag
  if not u or u.role!='driver':err(404,'Driver not found')
  if x.approved:
   if not u.license_no or not u.license_path:err(409,'Driving licence image is required before approval')
+  if not u.face_path or u.face_review_status!='approved':err(409,'Manager-approved live face enrolment is required before driver activation')
   check_dl(u.license_no)
   if not u.license_inspected_at:err(409,'Open the uploaded licence image in the management dashboard before approval')
   if not x.license_matches:err(409,'Manager must inspect the licence image and confirm its number matches the typed value')
@@ -458,7 +469,7 @@ def get_office_geofence(s:Session=Depends(db),_=Depends(manager)):
  return office_attendance_policy(s)
 
 @app.put('/api/management/office-geofence')
-def set_office_geofence(x:OfficeGeofenceUpdate,s:Session=Depends(db),u=Depends(manager)):
+def set_office_geofence(x:OfficeGeofenceUpdate,s:Session=Depends(db),u=Depends(super_admin)):
  _validate_office_settings(x)
  row=s.get(OfficeGeofence,'primary')
  if row is None:
@@ -477,16 +488,22 @@ def office_distance_m(lat1,lng1,lat2,lng2):
  a=math.sin(math.radians(lat2-lat1)/2)**2+math.cos(math.radians(lat1))*math.cos(math.radians(lat2))*math.sin(math.radians(lng2-lng1)/2)**2
  return 2*radius*math.asin(min(1.0,math.sqrt(a)))
 
-def enforce_office_punch(x,s:Optional[Session]=None):
+def classify_attendance(x,s:Session):
+ """Office or remote based on DB geofence; never silently accept poor GPS.
+ Biometric proof is intentionally NOT claimed by this GPS-only classification.
+ """
  policy=office_attendance_policy(s)
- if not policy['enabled']:return
- if x.accuracy_m is None or not math.isfinite(x.accuracy_m) or x.accuracy_m>policy['max_accuracy_m']:
-  err(422,'A precise GPS fix is required for office attendance. Move outdoors and retry')
- if not math.isfinite(x.lat) or not math.isfinite(x.lng):err(422,'Invalid device GPS location')
- # Conservative validation: allow position only when the accuracy circle lies inside the office radius.
+ if not math.isfinite(x.lat) or not math.isfinite(x.lng):err(422,'Invalid GPS coordinates')
+ # Preserve legacy demo/unconfigured attendance; NEVER label a location as Office
+ # without an actual configured geofence and a sufficiently accurate GPS fix.
+ if not policy.get('configured'):
+  return ('unclassified',None)
+ if x.accuracy_m is None or not math.isfinite(x.accuracy_m):err(422,'A precise GPS fix is required')
+ accuracy_limit=policy.get('max_accuracy_m') or 75
+ if x.accuracy_m>accuracy_limit:err(422,'GPS accuracy too low. Move outdoors and try again')
  distance=office_distance_m(x.lat,x.lng,policy['lat'],policy['lng'])
- if distance+x.accuracy_m>policy['radius_m']:
-  err(403,f'Punch allowed only within {round(policy["radius_m"])} m of the office. Current GPS is outside the permitted area (approximately {round(distance)} m from office)')
+ in_office=distance+x.accuracy_m<=policy['radius_m']
+ return ('office' if in_office else 'remote',round(distance,1))
 
 @app.get('/api/attendance/office-policy')
 def attendance_office_policy(s:Session=Depends(db),_=Depends(driver)):
@@ -495,18 +512,18 @@ def attendance_office_policy(s:Session=Depends(db),_=Depends(driver)):
 
 @app.post('/api/attendance/punch-in')
 def punch_in(x:Punch,u=Depends(driver),s:Session=Depends(db)):
- enforce_office_punch(x,s)
+ attendance_type,office_distance=classify_attendance(x,s)
  if u.shift_start and (not u.shift_end or naive(u.shift_start)>naive(u.shift_end)):err(409,'Already punched in')
  u.shift_start=now();u.shift_end=None;u.lat=x.lat;u.lng=x.lng;u.last_gps=now();u.last_gps_received_at=now();u.last_vehicle=x.vehicle or u.vehicle
- s.add(Attendance(id=str(uuid.uuid4()),driver_id=u.id,kind='in',at=now(),lat=x.lat,lng=x.lng,vehicle=u.last_vehicle));s.commit();return safe_user(u)
+ s.add(Attendance(id=str(uuid.uuid4()),driver_id=u.id,kind='in',at=now(),lat=x.lat,lng=x.lng,vehicle=u.last_vehicle,attendance_type=attendance_type,distance_from_office_m=office_distance,gps_accuracy_m=x.accuracy_m,verification_state='not_configured'));s.commit();return safe_user(u)
 @app.post('/api/attendance/punch-out')
 def punch_out(x:Punch,u=Depends(driver),s:Session=Depends(db)):
- enforce_office_punch(x,s)
+ attendance_type,office_distance=classify_attendance(x,s)
  if not u.shift_start or (u.shift_end and naive(u.shift_end)>naive(u.shift_start)):err(409,'Not punched in')
- u.shift_end=now();u.lat=x.lat;u.lng=x.lng;u.last_gps=now();u.last_gps_received_at=now();s.add(Attendance(id=str(uuid.uuid4()),driver_id=u.id,kind='out',at=now(),lat=x.lat,lng=x.lng,vehicle=x.vehicle or u.last_vehicle));s.commit();return safe_user(u)
+ u.shift_end=now();u.lat=x.lat;u.lng=x.lng;u.last_gps=now();u.last_gps_received_at=now();s.add(Attendance(id=str(uuid.uuid4()),driver_id=u.id,kind='out',at=now(),lat=x.lat,lng=x.lng,vehicle=x.vehicle or u.last_vehicle,attendance_type=attendance_type,distance_from_office_m=office_distance,gps_accuracy_m=x.accuracy_m,verification_state='not_configured'));s.commit();return safe_user(u)
 @app.get('/api/attendance')
 def attendance(s:Session=Depends(db),_=Depends(manager)):
- return [{'id':a.id,'driver_id':a.driver_id,'kind':a.kind,'at':iso(a.at),'lat':a.lat,'lng':a.lng,'vehicle':a.vehicle} for a in s.scalars(select(Attendance).order_by(Attendance.at.desc()).limit(300))]
+ return [{'id':a.id,'driver_id':a.driver_id,'kind':a.kind,'at':iso(a.at),'lat':a.lat,'lng':a.lng,'vehicle':a.vehicle,'attendance_type':a.attendance_type,'distance_from_office_m':a.distance_from_office_m,'gps_accuracy_m':a.gps_accuracy_m,'verification_state':a.verification_state} for a in s.scalars(select(Attendance).order_by(Attendance.at.desc()).limit(300))]
 @app.post('/api/tasks')
 async def create_task(x:TaskCreate,s:Session=Depends(db),_=Depends(manager)):
  u=s.get(User,x.driver_id)
@@ -518,6 +535,32 @@ async def create_task(x:TaskCreate,s:Session=Depends(db),_=Depends(manager)):
  if u.lat is not None and u.lng is not None:
   r=await route_options(u.lat,u.lng,x.lat,x.lng);t.route_distance_km=r['distance_km'];t.route_duration_min=r['duration_min'];t.route_source=r['source'];import json;t.route_json=json.dumps(r['coordinates']);t.route_alternatives_json=json.dumps([alt.get('coordinates',[]) for alt in r.get('alternative_routes',[])])
  s.add(t);s.commit();return task_json(t,s)
+class BulkDeliveryRequest(BaseModel):
+ deliveries:list[TaskCreate]=Field(min_length=1,max_length=100)
+
+@app.post('/api/tasks/bulk-preview')
+def bulk_delivery_preview(x:BulkDeliveryRequest,s:Session=Depends(db),_=Depends(manager)):
+ rows=[]
+ for idx,task in enumerate(x.deliveries,1):
+  issues=[];d=s.get(User,task.driver_id)
+  if not d or d.role!='driver' or not d.active or not d.approved or not d.license_verified:issues.append('Driver not eligible')
+  if not task.title.strip() or not task.address.strip():issues.append('Title and destination required')
+  if not -90<=task.lat<=90 or not -180<=task.lng<=180:issues.append('Invalid coordinates')
+  if not re.fullmatch(r'(?:[6-9][0-9]{9}|91[6-9][0-9]{9}|\+91[6-9][0-9]{9})',task.customer_phone or ''):issues.append('Recipient phone invalid')
+  rows.append({'row':idx,'valid':not issues,'errors':issues,'driver_id':task.driver_id,'title':task.title})
+ return {'total':len(rows),'valid':sum(r['valid'] for r in rows),'invalid':sum(not r['valid'] for r in rows),'rows':rows}
+
+@app.post('/api/tasks/bulk-commit',status_code=201)
+def bulk_delivery_commit(x:BulkDeliveryRequest,s:Session=Depends(db),_=Depends(manager)):
+ preview=bulk_delivery_preview(x,s,_)
+ if preview['invalid']:err(422,'Batch contains invalid tasks; preview and correct every row')
+ saved=[]
+ for item in x.deliveries:
+  t=Task(id=str(uuid.uuid4()),title=item.title.strip(),driver_id=item.driver_id,address=item.address.strip(),lat=item.lat,lng=item.lng,due_at=item.due_at,priority=item.priority,customer=item.customer,customer_phone=item.customer_phone,instructions=item.instructions,assigned_at=now(),status='assigned')
+  s.add(t);saved.append(t.id)
+ s.commit()
+ return {'created':len(saved),'task_ids':saved,'status':'assigned','route_calculation':'on_demand'}
+
 @app.post('/api/tasks/{tid}/late-reason')
 def submit_late_reason(tid:str,x:LateReason,u=Depends(driver),s:Session=Depends(db)):
  t=s.get(Task,tid)
@@ -560,12 +603,14 @@ def start_task(tid:str,u=Depends(driver),s:Session=Depends(db)):
  t=s.get(Task,tid)
  if not t or t.driver_id!=u.id:err(404,'Task not found')
  if t.status!='assigned':err(409,'Task not in assigned state')
+ if s.scalar(select(Task.id).where(Task.driver_id==u.id,Task.status=='in_progress',Task.id!=tid)):
+  err(409,'Complete the current delivery before starting the next queued delivery')
  t.status='in_progress';t.started_at=now();s.commit();return task_json(t,s)
 @app.get('/api/tasks/{tid}/route')
 async def task_route(tid:str,mode:str='fastest',s:Session=Depends(db),u=Depends(require)):
  t=s.get(Task,tid)
  if not t or (u.role=='driver' and t.driver_id!=u.id):err(404,'Task not found')
- if u.role=='manager': d=s.get(User,t.driver_id)
+ if u.role in ('manager','super_admin'): d=s.get(User,t.driver_id)
  else:d=u
  if not d or d.lat is None or d.lng is None:err(400,'Driver must send GPS location first')
  return await route_options(d.lat,d.lng,t.lat,t.lng,mode)
@@ -727,10 +772,10 @@ def private_file(filename:str,u=Depends(require),s:Session=Depends(db)):
  if filename!=Path(filename).name:err(400,'Invalid filename')
  path=UPLOAD/filename
  if not path.exists():err(404,'File not found')
- if u.role=='manager':
+ if u.role in ('manager','super_admin'):
   candidate=s.scalar(select(User).where(User.role=='driver',User.license_path==str(path)))
   if candidate:candidate.license_inspected_at=now();candidate.license_inspected_by=u.id;s.commit()
- if u.role!='manager':
+ if u.role not in ('manager','super_admin'):
   allowed=bool(u.face_path and Path(u.face_path).name==filename)
   allowed|=bool(u.license_path and Path(u.license_path).name==filename)
   allowed|=bool(s.scalar(select(Task).where(Task.driver_id==u.id,Task.proof_path==str(path))))
@@ -881,12 +926,12 @@ class ManagerAccountPatch(BaseModel):
  phone:Optional[str]=None
  email:Optional[str]=None
  password:Optional[str]=None
-def safe_manager(u):return {'id':u.id,'name':u.name,'phone':u.phone,'email':u.email or '', 'active':u.active is not False,'role':'manager'}
+def safe_manager(u):return {'id':u.id,'name':u.name,'phone':u.phone,'email':u.email or '', 'active':u.active is not False,'role':u.role}
 @app.get('/api/management/users')
-def management_users(s:Session=Depends(db),_=Depends(manager)):
- return [safe_manager(u) for u in s.scalars(select(User).where(User.role=='manager').order_by(User.name)).all()]
+def management_users(s:Session=Depends(db),_=Depends(super_admin)):
+ return [safe_manager(u) for u in s.scalars(select(User).where(User.role.in_(['manager','super_admin'])).order_by(User.name)).all()]
 @app.post('/api/management/users')
-def create_management_user(x:ManagerAccountCreate,s:Session=Depends(db),_=Depends(manager)):
+def create_management_user(x:ManagerAccountCreate,s:Session=Depends(db),_=Depends(super_admin)):
  check_phone(x.phone)
  if s.scalar(select(User).where(User.phone==x.phone)):err(409,'Phone is already in use')
  email=normalized_email(x.email);valid_password(x.password)
@@ -894,9 +939,9 @@ def create_management_user(x:ManagerAccountCreate,s:Session=Depends(db),_=Depend
  u=User(id=str(uuid.uuid4()),role='manager',name=x.name.strip(),phone=x.phone,email=email,password_hash=hash_pin(x.password),pin_hash=hash_pin(secrets.token_urlsafe(32)),approved=True,active=True)
  s.add(u);s.commit();return safe_manager(u)
 @app.patch('/api/management/users/{uid}')
-def edit_management_user(uid:str,x:ManagerAccountPatch,s:Session=Depends(db),_=Depends(manager)):
+def edit_management_user(uid:str,x:ManagerAccountPatch,s:Session=Depends(db),_=Depends(super_admin)):
  u=s.get(User,uid)
- if not u or u.role!='manager':err(404,'Manager account not found')
+ if not u or u.role not in ('manager','super_admin'):err(404,'Management account not found')
  if x.name is not None:u.name=x.name.strip()
  if x.phone is not None:
   check_phone(x.phone)
@@ -911,10 +956,10 @@ def edit_management_user(uid:str,x:ManagerAccountPatch,s:Session=Depends(db),_=D
   valid_password(x.password);u.password_hash=hash_pin(x.password)
  s.commit();return safe_manager(u)
 @app.delete('/api/management/users/{uid}')
-def deactivate_management_user(uid:str,s:Session=Depends(db),current=Depends(manager)):
+def deactivate_management_user(uid:str,s:Session=Depends(db),current=Depends(super_admin)):
  u=s.get(User,uid)
- if not u or u.role!='manager':err(404,'Manager account not found')
- if u.id==current.id:err(409,'You cannot deactivate your own account')
+ if not u or u.role not in ('manager','super_admin'):err(404,'Management account not found')
+ if u.id==current.id or u.role=='super_admin':err(409,'Super admin cannot be deactivated through manager maintenance')
  u.active=False;s.commit();return {'ok':True,'id':uid}
 
 @app.get('/api/overview')

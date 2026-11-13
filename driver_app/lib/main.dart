@@ -120,6 +120,13 @@ class _PendingDriverPageState extends State<PendingDriverPage>{
   if(photo==null)return;
   setState(()=>busy=true);
   try{
+   // Enrol from live camera during mandatory licence onboarding.
+   // A gallery image is never used as the biometric reference.
+   if(widget.user['face_enrolled']!=true||widget.user['face_review_status']=='rejected'){
+    final face=await picker.pickImage(source:ImageSource.camera,imageQuality:85,preferredCameraDevice:CameraDevice.front);
+    if(face==null){if(mounted)toast(context,'Face photo required. Licence was not submitted.');return;}
+    await api.call('/onboarding/face',method:'POST',photo:face.path);
+   }
    await api.call('/onboarding/license',method:'POST',photo:photo.path);
    await widget.onRefresh();
    if(mounted)toast(context,'Licence proof submitted. Management approval is required before you can use the app.');
@@ -168,7 +175,7 @@ class _PendingDriverPageState extends State<PendingDriverPage>{
       const SizedBox(height:16),
       const Text('What you need to do',style:TextStyle(color:navy,fontWeight:FontWeight.w800,fontSize:16)),
       const SizedBox(height:10),
-      bulletPoint('Upload a clear image of your driving licence.'),
+      bulletPoint('Upload your driving licence and capture a live face enrolment photo.'),
       bulletPoint('Management will review the proof and confirm the licence details.'),
       bulletPoint('If the proof is rejected, you must upload it again before entering the app.'),
       if(note.isNotEmpty)...[const SizedBox(height:16),const Text('Manager note',style:TextStyle(color:navy,fontWeight:FontWeight.w800,fontSize:16)),const SizedBox(height:6),Text(note,style:const TextStyle(color:Colors.blueGrey,height:1.35))],
