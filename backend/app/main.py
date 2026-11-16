@@ -158,7 +158,7 @@ def license_upload_locked(u):
 def safe_user(u):return {'id':u.id,'role':u.role,'name':u.name,'phone':u.phone,'email':u.email if u.role in ('manager','super_admin') else None,'language':u.language,'license_no':u.license_no,'vehicle':u.vehicle,'vehicle_plate':u.vehicle_plate,'face_enrolled':bool(u.face_path),'face_review_status':('approved' if u.face_review_status=='approved' else 'rejected' if u.face_review_status=='rejected' else 'pending' if u.face_path else 'not_submitted'),'face_review_note':u.face_review_note or '', 'face_url':'/api/files/'+Path(u.face_path).name if u.face_path else None,'license_url':'/api/files/'+Path(u.license_path).name if u.license_path else None,'approved':u.approved,'active':u.active is not False,'license_verified':bool(u.license_verified),'license_review_note':u.license_review_note or '','license_status':license_status(u),'license_inspected_at':iso(u.license_inspected_at),'on_shift':bool(u.shift_start and (not u.shift_end or naive(u.shift_start)>naive(u.shift_end))),'lat':u.lat,'lng':u.lng,'last_gps':iso(u.last_gps),'shift_expected':u.shift_expected,'shift_end_expected':u.shift_end_expected,'pin_change_required':bool(u.pin_change_required)}
 def task_json(t,s):
  d=s.get(User,t.driver_id) if t.driver_id else None
- return {'id':t.id,'title':t.title,'address':t.address,'lat':t.lat,'lng':t.lng,'driver_id':t.driver_id,'driver_name':d.name if d else None,'status':t.status,'priority':t.priority,'customer':t.customer,'customer_phone':t.customer_phone,'instructions':t.instructions,'due_at':iso(t.due_at),'assigned_at':iso(t.assigned_at),'started_at':iso(t.started_at),'completed_at':iso(t.completed_at),'proof_url':('/api/files/'+Path(t.proof_path).name) if t.proof_path else None,'otp_verified':t.otp_verified,'route_distance_km':t.route_distance_km,'route_duration_min':t.route_duration_min,'route_source':t.route_source,'route_available':bool(t.route_json and (t.route_source or '').startswith(('OSRM','TomTom'))),'route_deviation':t.route_deviation,'late_reason':t.late_reason or '','late_reason_at':iso(t.late_reason_at)}
+ return {'id':t.id,'title':t.title,'address':t.address,'lat':t.lat,'lng':t.lng,'driver_id':t.driver_id,'driver_name':d.name if d else None,'status':t.status,'queue_state':('waiting' if t.status==QUEUE_WAITING else 'accept_required' if t.status==QUEUE_READY else 'active' if t.status=='in_progress' else 'accepted' if t.status=='assigned' else t.status),'priority':t.priority,'customer':t.customer,'customer_phone':t.customer_phone,'instructions':t.instructions,'due_at':iso(t.due_at),'assigned_at':iso(t.assigned_at),'started_at':iso(t.started_at),'completed_at':iso(t.completed_at),'proof_url':('/api/files/'+Path(t.proof_path).name) if t.proof_path else None,'otp_verified':t.otp_verified,'route_distance_km':t.route_distance_km,'route_duration_min':t.route_duration_min,'route_source':t.route_source,'route_available':bool(t.route_json and (t.route_source or '').startswith(('OSRM','TomTom'))),'route_deviation':t.route_deviation,'late_reason':t.late_reason or '','late_reason_at':iso(t.late_reason_at)}
 def expense_json(e,s):
  u=s.get(User,e.driver_id)
  return {'id':e.id,'driver_id':e.driver_id,'driver_name':u.name if u else '', 'task_id':e.task_id,'category':e.category,'amount':e.amount,'note':e.note,'status':e.status,'created_at':iso(e.created_at),'receipt_url':'/api/files/'+Path(e.receipt_path).name if e.receipt_path else None,'fraud_flags':__import__('json').loads(e.fraud_flags or '[]'),'evidence_reviewed':bool(e.evidence_reviewed),'reviewed_at':iso(e.reviewed_at)}
@@ -610,7 +610,9 @@ def driver_notifications(u=Depends(driver),s:Session=Depends(db)):
    if 0<=until<=5:items.append({'id':'shift-upcoming-'+today.isoformat(),'type':'shift_reminder','title':'Punch-in in 5 minutes','message':f'Your shift starts at {u.shift_expected}','at':iso(shift)})
    if -1440<until<0:items.append({'id':'shift-missed-'+today.isoformat(),'type':'missed_login','title':'Missed punch-in','message':f'Your {u.shift_expected} shift has started. Punch in if you are working.','at':iso(current)})
  except Exception:pass
- for t in s.scalars(select(Task).where(Task.driver_id==u.id,Task.status.in_(['assigned','in_progress']))):
+ for t in s.scalars(select(Task).where(Task.driver_id==u.id,Task.status.in_(['assigned','in_progress',QUEUE_WAITING,QUEUE_READY]))):
+  if t.status==QUEUE_READY:items.append({'id':'secondary-ready-'+t.id,'type':'secondary_ready','title':'Next delivery ready','message':f'Accept {t.title} to begin your next delivery','at':iso(current),'task_id':t.id})
+  if t.status==QUEUE_WAITING:items.append({'id':'secondary-queued-'+t.id,'type':'secondary_queued','title':'Secondary delivery queued','message':f'{t.title} is waiting for your current delivery to finish','at':iso(t.assigned_at or current),'task_id':t.id})
   if t.status=='assigned':items.append({'id':'assignment-'+t.id,'type':'task_assignment','title':'New task assigned','message':f'{t.title} • {t.address}','at':iso(t.assigned_at or current)})
   if t.due_at:
    minutes=(naive(t.due_at)-naive(current)).total_seconds()/60
@@ -626,11 +628,57 @@ def tasks(s:Session=Depends(db),u=Depends(require)):
  q=select(Task).order_by(Task.assigned_at.desc())
  if u.role=='driver':q=q.where(Task.driver_id==u.id)
  return [task_json(t,s) for t in s.scalars(q)]
+# Sequential secondary-delivery queue. No new columns or destructive migrations.
+# Existing assigned deliveries retain their original API contract.
+QUEUE_WAITING='queued'
+QUEUE_READY='ready_for_acceptance'
+
+def delivery_queue_state(s,driver_id):
+ tasks=list(s.scalars(select(Task).where(Task.driver_id==driver_id,Task.status.in_(['assigned','in_progress',QUEUE_WAITING,QUEUE_READY]))))
+ return tasks
+
+def promote_next_secondary(s,driver_id):
+ """Promote one queued delivery after the active task is completed.
+    Never promote if the driver already has an accepted/startable task."""
+ tasks=delivery_queue_state(s,driver_id)
+ if any(t.status in ('in_progress','assigned',QUEUE_READY) for t in tasks):return None
+ waiting=sorted((t for t in tasks if t.status==QUEUE_WAITING),key=lambda t:(naive(t.assigned_at or now()),t.id))
+ if not waiting:return None
+ next_task=waiting[0];next_task.status=QUEUE_READY
+ return next_task
+
+@app.post('/api/tasks/{tid}/accept')
+def accept_secondary_task(tid:str,u=Depends(driver),s:Session=Depends(db)):
+ # Lock driver row to serialize accept and start decisions on PostgreSQL.
+ locked=s.scalar(select(User).where(User.id==u.id).with_for_update())
+ t=s.scalar(select(Task).where(Task.id==tid,Task.driver_id==locked.id).with_for_update())
+ if not t:err(404,'Task not found')
+ if t.status!=QUEUE_READY:err(409,'This delivery is not ready for acceptance')
+ if any(x.id!=tid and x.status in ('in_progress','assigned') for x in delivery_queue_state(s,u.id)):
+  err(409,'Complete the current delivery before accepting the next order')
+ t.status='assigned';s.commit();return task_json(t,s)
+
+@app.post('/api/tasks/{tid}/decline-secondary')
+def decline_secondary(tid:str,u=Depends(driver),s:Session=Depends(db)):
+ s.scalar(select(User).where(User.id==u.id).with_for_update())
+ t=s.scalar(select(Task).where(Task.id==tid,Task.driver_id==u.id).with_for_update())
+ if not t:err(404,'Task not found')
+ if t.status not in (QUEUE_WAITING,QUEUE_READY):err(409,'Only unaccepted secondary deliveries can be declined')
+ order=s.scalar(select(UnassignedOrder).where(UnassignedOrder.task_id==t.id).with_for_update())
+ if not order or order.status!='assigned':err(409,'Linked order is no longer available for reassignment')
+ was_ready=t.status==QUEUE_READY
+ t.status='declined'
+ order.status='unassigned';order.task_id=None;order.assigned_driver_id=None;order.assigned_by=None;order.assigned_at=None
+ if was_ready:promote_next_secondary(s,u.id)
+ s.commit()
+ return {'task_id':t.id,'status':'declined','order_id':order.id,'order_status':'unassigned','message':'Order returned to management for reassignment'}
+
 @app.post('/api/tasks/{tid}/start')
 def start_task(tid:str,u=Depends(driver),s:Session=Depends(db)):
- t=s.get(Task,tid)
- if not t or t.driver_id!=u.id:err(404,'Task not found')
- if t.status!='assigned':err(409,'Task not in assigned state')
+ s.scalar(select(User).where(User.id==u.id).with_for_update())
+ t=s.scalar(select(Task).where(Task.id==tid,Task.driver_id==u.id).with_for_update())
+ if not t:err(404,'Task not found')
+ if t.status!='assigned':err(409,'Task not accepted or not ready to start')
  if s.scalar(select(Task.id).where(Task.driver_id==u.id,Task.status=='in_progress',Task.id!=tid)):
   err(409,'Complete the current delivery before starting the next queued delivery')
  t.status='in_progress';t.started_at=now();s.commit();return task_json(t,s)
@@ -776,14 +824,18 @@ def old_manager_otp_disabled(tid:str,s:Session=Depends(db),_=Depends(manager)):
 
 @app.post('/api/tasks/{tid}/complete')
 async def complete_task(tid:str,otp:str=Form(...),image:UploadFile=File(...),u=Depends(driver),s:Session=Depends(db)):
- t=s.get(Task,tid)
- if not t or t.driver_id!=u.id:err(404,'Task not found')
+ # Serialize completion with concurrent manager allocation on PostgreSQL.
+ s.scalar(select(User).where(User.id==u.id).with_for_update())
+ t=s.scalar(select(Task).where(Task.id==tid,Task.driver_id==u.id).with_for_update())
+ if not t:err(404,'Task not found')
  if t.status!='in_progress':err(409,'Start delivery before completion')
  if (t.otp_attempts or 0)>=5:err(429,'Too many invalid OTP attempts; request another code after expiry')
  if not t.otp_hash or not t.otp_expires or naive(t.otp_expires)<naive(now()):err(400,'OTP not issued or expired')
  if not check_pin(otp,t.otp_hash):
   t.otp_attempts=(t.otp_attempts or 0)+1;s.commit();err(400,'OTP invalid or expired')
- path=await store_image(image);t.proof_path=str(path);t.status='completed';t.completed_at=now();t.otp_verified=True;t.otp_hash='';s.commit();return task_json(t,s)
+ path=await store_image(image);t.proof_path=str(path);t.status='completed';t.completed_at=now();t.otp_verified=True;t.otp_hash=''
+ promote_next_secondary(s,u.id)
+ s.commit();return task_json(t,s)
 async def store_image(upload:UploadFile):
  data=await upload.read(5*1024*1024+1)
  if len(data)>5*1024*1024:err(413,'Image too large; max 5 MB')
@@ -1290,7 +1342,14 @@ def list_orders(status:str='all',s:Session=Depends(db),_=Depends(manager)):
  if status not in ('all','unassigned','assigned'):err(422,'Invalid status')
  q=select(UnassignedOrder).order_by(UnassignedOrder.created_at.desc()).limit(500)
  if status!='all':q=q.where(UnassignedOrder.status==status)
- return [order_view(o) for o in s.scalars(q)]
+ orders=list(s.scalars(q))
+ ids=[o.task_id for o in orders if o.task_id]
+ task_statuses={t.id:t.status for t in s.scalars(select(Task).where(Task.id.in_(ids)))} if ids else {}
+ output=[]
+ for order in orders:
+  item=order_view(order);item['task_status']=task_statuses.get(order.task_id)
+  output.append(item)
+ return output
 
 def eligible_for_order(d,order):
  if d.role!='driver' or d.active is False or not d.approved or not d.license_verified:return False
@@ -1301,23 +1360,28 @@ def driver_recommendations(order,s):
  candidates=[]
  for d in s.scalars(select(User).where(User.role=='driver')):
   if not eligible_for_order(d,order):continue
-  tasks=list(s.scalars(select(Task).where(Task.driver_id==d.id,Task.status.in_(['assigned','in_progress']))))
+  tasks=list(s.scalars(select(Task).where(Task.driver_id==d.id,Task.status.in_(['assigned','in_progress',QUEUE_WAITING,QUEUE_READY]))))
   current=next((t for t in tasks if t.status=='in_progress'),None)
-  queued=sum(t.status=='assigned' for t in tasks)
+  queued=sum(t.status in ('assigned',QUEUE_WAITING,QUEUE_READY) for t in tasks)
   on_shift=bool(d.shift_start and (not d.shift_end or naive(d.shift_start)>naive(d.shift_end)))
   age=(now()-d.last_gps.replace(tzinfo=timezone.utc) if d.last_gps and d.last_gps.tzinfo is None else now()-d.last_gps).total_seconds() if d.last_gps else None
   gps_fresh=age is not None and 0<=age<=120
-  # Driver's live position is NOT a credible pickup origin when GPS is stale.
-  # After an active delivery, use its destination as a planning hint, not a live location.
-  origin_lat,origin_lng=(d.lat,d.lng) if gps_fresh and d.lat is not None and d.lng is not None else (None,None)
-  source='fresh_gps' if origin_lat is not None else 'unavailable'
-  if current and not gps_fresh:
-   origin_lat,origin_lng=current.lat,current.lng;source='current_delivery_destination_estimate'
+  # A busy driver's NEXT pickup begins after the active delivery destination.
+  # This is a planning estimate, never the driver's live reported position.
+  if current:
+   origin_lat,origin_lng=current.lat,current.lng
+   source='current_delivery_destination_estimate'
+  elif gps_fresh and d.lat is not None and d.lng is not None:
+   origin_lat,origin_lng=d.lat,d.lng
+   source='fresh_gps'
+  else:
+   origin_lat,origin_lng=None,None
+   source='unavailable'
   distance=round(haversine(origin_lat,origin_lng,order.pickup_lat,order.pickup_lng),2) if origin_lat is not None else None
   # Ranking heuristic, not AI prediction or live-traffic ETA. Never invent road metrics.
   score=(0 if on_shift else 100)+(0 if gps_fresh else 40)+(distance if distance is not None else 100)+queued*15+(20 if current else 0)
   reasons=[('On shift' if on_shift else 'Off shift'),('Fresh GPS' if gps_fresh else 'GPS unavailable or stale'),f'{queued} queued task(s)']
-  if current:reasons.append('Active delivery: '+current.title)
+  if current:reasons.append('Active delivery: '+current.title+'; secondary order will wait')
   candidates.append({'driver_id':d.id,'name':d.name,'phone':d.phone,'vehicle':d.vehicle,
    'on_shift':on_shift,'gps_fresh':gps_fresh,'location_source':source,
    'distance_to_pickup_km':distance,'distance_type':'straight_line_estimate',
@@ -1342,10 +1406,13 @@ def assign_order(order_id:str,x:OrderDriverAssignment,s:Session=Depends(db),u=De
  o=s.scalar(select(UnassignedOrder).where(UnassignedOrder.id==order_id).with_for_update())
  if not o:err(404,'Order not found')
  if o.status!='unassigned':err(409,'This order is already assigned')
- d=s.get(User,x.driver_id)
+ d=s.scalar(select(User).where(User.id==x.driver_id).with_for_update())
  if not d or not eligible_for_order(d,o):err(409,'Selected driver is not active, approved, licence-verified or vehicle-compatible')
+ existing=delivery_queue_state(s,d.id)
+ # The first task keeps the existing assigned/start behavior. Additional tasks wait.
+ secondary=any(t.status in ('assigned','in_progress',QUEUE_WAITING,QUEUE_READY) for t in existing)
  t=Task(id=str(uuid.uuid4()),title=o.title,address=o.delivery_address,lat=o.delivery_lat,lng=o.delivery_lng,
-  driver_id=d.id,status='assigned',priority=('critical' if o.priority=='urgent' else o.priority),
+  driver_id=d.id,status=(QUEUE_WAITING if secondary else 'assigned'),priority=('critical' if o.priority=='urgent' else o.priority),
   customer=o.customer_name,customer_phone=o.customer_phone,instructions=(f'Pickup: {o.pickup_address}. '+(o.instructions or '')),
   due_at=o.due_at,assigned_at=now())
  s.add(t);o.status='assigned';o.task_id=t.id;o.assigned_driver_id=d.id;o.assigned_by=u.id;o.assigned_at=now()
@@ -1353,4 +1420,4 @@ def assign_order(order_id:str,x:OrderDriverAssignment,s:Session=Depends(db),u=De
  try:s.commit()
  except Exception:
   s.rollback();err(409,'Assignment conflict. Refresh the order before retrying')
- return {'order':order_view(o),'task':task_json(t,s),'message':'Driver assigned by manager; task queued'}
+ return {'order':order_view(o),'task':task_json(t,s),'message':('Secondary delivery queued; driver accepts after current delivery' if secondary else 'Primary delivery assigned'),'secondary':secondary,'queue_state':t.status}

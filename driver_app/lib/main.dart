@@ -361,6 +361,8 @@ class _DriverHomeState extends State<DriverHome>{int tab=0;List tasks=[];List ex
                                 if (!mounted) return;
                                 setState(() => tab = (
                                   kind == 'task_assignment' ||
+                                  kind == 'secondary_ready' ||
+                                  kind == 'secondary_queued' ||
                                   kind == 'deadline_warning' ||
                                   kind == 'deadline_missed' ||
                                   kind == 'predicted_delay'
@@ -413,7 +415,7 @@ class _DriverHomeState extends State<DriverHome>{int tab=0;List tasks=[];List ex
       if(result[2]['on_shift']!=true){gpsHeartbeat?.cancel();gpsHeartbeat=null;if(gpsSub!=null){await gpsSub?.cancel();gpsSub=null;}}
       final signature='${result[2]['shift_expected']}|${result[2]['on_shift']}|${tasks.map((t)=>'${t['id']}:${t['status']}:${t['due_at']}').join('|')}';
       if(signature!=_scheduledSignature){_scheduledSignature=signature;DriverNotifications.syncShift('${result[2]['shift_expected']??'09:00'}',result[2]['on_shift']==true);DriverNotifications.syncTasks(tasks);}
-      for(final n in notifications){final key='${n['id']}';if(!seenNotifications.contains(key)&&!_notifiedThisSession.contains(key)){_notifiedThisSession.add(key);if(n['type']=='task_assignment'||n['type']=='predicted_delay'||n['type']=='deadline_warning'||n['type']=='deadline_missed')DriverNotifications.show(key,'${n['title']??''}','${n['message']??''}');}}}}catch(e){if(mounted)toast(context,'Refresh failed: $e');}}
+      for(final n in notifications){final key='${n['id']}';if(!seenNotifications.contains(key)&&!_notifiedThisSession.contains(key)){_notifiedThisSession.add(key);if(n['type']=='task_assignment'||n['type']=='secondary_ready'||n['type']=='secondary_queued'||n['type']=='predicted_delay'||n['type']=='deadline_warning'||n['type']=='deadline_missed')DriverNotifications.show(key,'${n['title']??''}','${n['message']??''}');}}}}catch(e){if(mounted)toast(context,'Refresh failed: $e');}}
  void startPolling(){poll?.cancel();poll=Timer.periodic(const Duration(seconds:12),(_){if(!mounted)return;load();if(trackingOnShift){if(gpsSub==null)startGps();syncPendingGps();}});}
  Future<Position> location()async{if(!await Geolocator.isLocationServiceEnabled())throw Exception('Enable device location');var p=await Geolocator.checkPermission();if(p==LocationPermission.denied)p=await Geolocator.requestPermission();if(p==LocationPermission.denied||p==LocationPermission.deniedForever)throw Exception('Location permission required');return Geolocator.getCurrentPosition(locationSettings:const LocationSettings(accuracy:LocationAccuracy.high,timeLimit:Duration(seconds:20)));}
  Future<void> startGps()async{
@@ -507,6 +509,8 @@ class _DriverHomeState extends State<DriverHome>{int tab=0;List tasks=[];List ex
  }
  Future<void> punch()async{setState(()=>busy=true);try{final p=await location();final on=widget.user['on_shift']==true;final r=await api.call('/attendance/punch-${on?'out':'in'}',method:'POST',json:{'lat':p.latitude,'lng':p.longitude,'accuracy_m':p.accuracy,'vehicle':widget.user['vehicle']??''});await widget.onUser(Map<String,dynamic>.from(r));trackingOnShift=!on;if(on){gpsHeartbeat?.cancel();gpsHeartbeat=null;await gpsSub?.cancel();gpsSub=null;if(mounted)setState(()=>gpsSyncStatus='Off shift · location sharing stopped');}else{await startGps();await syncPendingGps();}await DriverNotifications.syncShift('${widget.user['shift_expected']??'09:00'}',!on);await load();if(mounted)toast(context,on?'Punched out successfully':'Punched in successfully');}catch(e){if(mounted)toast(context,'Punch failed: $e');}finally{if(mounted)setState(()=>busy=false);}}
  Future<void> sos()async{final confirm=await showDialog<bool>(context:context,builder:(c)=>AlertDialog(icon:const Icon(Icons.sos,color:Colors.red,size:40),title:Text(tr('sos')),content:Text(tr('sosQuestion')),actions:[TextButton(onPressed:()=>Navigator.pop(c,false),child:Text(tr('cancel'))),FilledButton(style:FilledButton.styleFrom(backgroundColor:Colors.red),onPressed:()=>Navigator.pop(c,true),child:Text(tr('confirm')))]));if(confirm!=true)return;try{Position? p;try{p=await location();}catch(_){ }final r=await api.call('/sos',method:'POST',json:{'confirmed':true,'lat':p?.latitude,'lng':p?.longitude,'message':'Driver requested emergency assistance'});if(mounted)toast(context,r['status']=='received_by_server'?'SOS received by management server':'SOS status unknown');}catch(e){if(mounted)showDialog(context:context,builder:(c)=>AlertDialog(title:const Text('SOS not delivered'),content:Text('Management did not confirm receipt. Call emergency services if needed. $e'),actions:[TextButton(onPressed:()=>Navigator.pop(c),child:const Text('OK'))]));}}
+ Future<void> declineSecondary(Map t)async{final yes=await showDialog<bool>(context:context,builder:(c)=>AlertDialog(title:const Text('Decline secondary delivery?'),content:const Text('This order will return to management for reassignment. Your current delivery will not change.'),actions:[TextButton(onPressed:()=>Navigator.pop(c,false),child:const Text('Keep order')),FilledButton(onPressed:()=>Navigator.pop(c,true),child:const Text('Decline'))]));if(yes!=true)return;try{await api.call('/tasks/${t['id']}/decline-secondary',method:'POST');await load();if(mounted)toast(context,'Secondary delivery returned for reassignment');}catch(e){if(mounted)toast(context,'Could not decline: $e');}}
+ Future<void> acceptSecondary(Map t)async{try{await api.call('/tasks/${t['id']}/accept',method:'POST');await load();if(mounted)toast(context,'Secondary delivery accepted. You can now start it.');}catch(e){if(mounted)toast(context,'Could not accept secondary delivery: $e');}}
  Future<void> startTask(Map t)async{try{await api.call('/tasks/${t['id']}/start',method:'POST');await load();}catch(e){if(mounted)toast(context,'Could not start: $e');}}
  Future<void> navigate(Map t)async{final uri=Uri.parse('https://www.google.com/maps/dir/?api=1&destination=${t['lat']},${t['lng']}&travelmode=driving');if(!await launchUrl(uri,mode:LaunchMode.externalApplication)&&mounted)toast(context,'Unable to open navigation');}
  Future<void> sendRecipientOtp(Map t)async{
@@ -619,6 +623,7 @@ class _DriverHomeState extends State<DriverHome>{int tab=0;List tasks=[];List ex
    final u=widget.user;
    final assigned=tasks.where((t)=>t['status']=='assigned').toList();
    final active=tasks.where((t)=>t['status']=='in_progress').toList();
+   final secondary=tasks.where((t)=>t['status']=='queued'||t['status']=='ready_for_acceptance').toList();
    final done=tasks.where((t)=>t['status']=='completed').length;
    return Scaffold(
      appBar:AppBar(
@@ -666,6 +671,7 @@ class _DriverHomeState extends State<DriverHome>{int tab=0;List tasks=[];List ex
            responsiveSection(tr('assigned'),Icons.assignment_outlined),
            ...assigned.map((t)=>taskCard(t)),
            if(assigned.isEmpty)emptyState(Icons.inbox_outlined,'No deliveries assigned yet'),
+           if(secondary.isNotEmpty)...[const SizedBox(height:16),responsiveSection('Upcoming secondary deliveries',Icons.queue_outlined),...secondary.map((t)=>taskCard(t))],
          ],
          if(tab==1)...[
            responsiveSection(tr('tasks'),Icons.inventory_2_outlined),
@@ -884,6 +890,9 @@ class _DriverHomeState extends State<DriverHome>{int tab=0;List tasks=[];List ex
      if('${t['route_source']??''}'.contains('fallback'))const Padding(padding:EdgeInsets.only(top:5),child:Text('Route is an estimate, not turn-by-turn navigation',style:TextStyle(color:Colors.deepOrange,fontSize:11))),
      const Divider(height:25),
      Wrap(spacing:8,runSpacing:8,children:[
+       if(t['status']=='ready_for_acceptance')FilledButton.icon(style:filled(),onPressed:()=>acceptSecondary(t),icon:const Icon(Icons.check_circle_outline),label:const Text('Accept next delivery')),
+       if(t['status']=='queued')const Chip(avatar:Icon(Icons.hourglass_bottom,size:17),label:Text('Waiting for current delivery')),
+       if(t['status']=='queued'||t['status']=='ready_for_acceptance')OutlinedButton.icon(onPressed:()=>declineSecondary(t),icon:const Icon(Icons.close),label:const Text('Decline secondary order')),
        if(t['status']=='assigned')FilledButton.icon(style:filled(),onPressed:()=>startTask(t),icon:const Icon(Icons.play_arrow),label:Text(tr('start'))),
        if(t['status']=='in_progress')FilledButton.icon(style:filled(),onPressed:()=>complete(t),icon:const Icon(Icons.verified_outlined),label:Text(tr('complete'))),
        if(t['status']!='completed')OutlinedButton.icon(onPressed:()=>showRoadDirections(t),icon:const Icon(Icons.route_outlined),label:const Text('View route map')),
