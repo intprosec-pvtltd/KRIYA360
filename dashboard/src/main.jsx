@@ -1,9 +1,10 @@
+import {API,apiAsset,apiFetch} from './apiConfig.js';
 import {AttendanceReports,BulkDriverImport,LayerTiles,SOSLocation} from './nextFeatures.jsx';
 import OrderAllocation from './OrderAllocation.jsx';
-import React,{useState,useEffect,useCallback} from 'react';import toast,{Toaster} from 'react-hot-toast';import{createRoot}from'react-dom/client';import{MapContainer,TileLayer,Marker,Popup,Polyline,useMapEvents,useMap}from'react-leaflet';import L from 'leaflet';import 'leaflet/dist/leaflet.css';import './style.css';import{LayoutDashboard,UsersRound,Package,MapPinned,Wallet,ChartNoAxesCombined,BellRing,CalendarClock,LogOut,Plus,ShieldAlert,Navigation,Clock3,CheckCircle2,AlertTriangle,Truck,UserRound,Search,RefreshCcw,Receipt,Camera,Phone,Menu,Route,MapPin,ArrowRight,LockKeyhole,Send,Activity,ShieldCheck,ExternalLink,X,HeartPulse}from'lucide-react';
+import React,{useState,useEffect,useCallback} from 'react';import toast,{Toaster} from 'react-hot-toast';import{createRoot}from'react-dom/client';import{MapContainer,TileLayer,Marker,Popup,Polyline,useMapEvents,useMap}from'./mapProvider.jsx';import L from 'leaflet';import 'leaflet/dist/leaflet.css';import './style.css';import{LayoutDashboard,UsersRound,Package,MapPinned,Wallet,ChartNoAxesCombined,BellRing,CalendarClock,LogOut,Plus,ShieldAlert,Navigation,Clock3,CheckCircle2,AlertTriangle,Truck,UserRound,Search,RefreshCcw,Receipt,Camera,Phone,Menu,Route,MapPin,ArrowRight,LockKeyhole,Send,Activity,ShieldCheck,ExternalLink,X,HeartPulse,Eye,EyeOff,LoaderCircle}from'lucide-react';
 // Leaflet marker assets are served by CDN; map tiles require internet.
 const markerIcon=new L.Icon({iconUrl:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',shadowUrl:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',iconSize:[25,41],iconAnchor:[12,41]});
-const API='/api';async function request(path,opts={},token){const res=await fetch(API+path,{...opts,headers:{...(opts.body instanceof FormData?{}:{'Content-Type':'application/json'}),...(token?{Authorization:'Bearer '+token}:{}),...(opts.headers||{})}});const body=await res.json().catch(()=>({}));if(!res.ok){const error=new Error(typeof body.detail==='string'?body.detail:`Request failed (${res.status})`);error.status=res.status;throw error;}return body;}
+async function request(path,opts={},token){const res=await apiFetch(API+path,{...opts,headers:{...(opts.body instanceof FormData?{}:{'Content-Type':'application/json'}),...(token?{Authorization:'Bearer '+token}:{}),...(opts.headers||{})}});const body=await res.json().catch(()=>({}));if(!res.ok){const error=new Error(typeof body.detail==='string'?body.detail:`Request failed (${res.status})`);error.status=res.status;throw error;}return body;}
 const money=v=>'₹'+Number(v||0).toLocaleString('en-IN');const dt=v=>v?new Date(v).toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'}):'—';const capital=v=>(v||'').replaceAll('_',' ').replace(/\b\w/g,x=>x.toUpperCase());
 const nav=[['Overview',LayoutDashboard],['Drivers',UsersRound],['Assignments',Package],['Live Tracking',MapPinned],['Expenses',Wallet],['Performance',ChartNoAxesCombined],['Attendance',CalendarClock],['Alerts & SOS',BellRing]];
 function Tag({children,tone='blue'}){return <span className={'tag '+tone}>{children}</span>};function Empty({text='No records yet'}){return <div className="empty"><Package size={30}/><p>{text}</p></div>};
@@ -128,7 +129,7 @@ function useApprovedDriverPhotos(drivers,token){
   const sources=drivers.filter(d=>d.face_review_status==='approved'&&d.face_url&&d.face_url.startsWith('/api/files/'));
   Promise.all(sources.map(async d=>{
    try{
-    const response=await fetch(d.face_url,{headers:{Authorization:'Bearer '+token}});
+    const response=await apiFetch(apiAsset(d.face_url),{headers:{Authorization:'Bearer '+token}});
     if(!response.ok)throw Error('Photo unavailable');
     const blob=await response.blob();if(!blob.type.startsWith('image/'))throw Error('Not an image');
     const url=URL.createObjectURL(blob);if(cancelled){URL.revokeObjectURL(url);return null;}urls.push(url);return [d.id,url];
@@ -427,16 +428,17 @@ function SOSCommandAlert({token,onNavigate,onMap,onRefresh,mapOpen=false}){
  </>;
 }
 function Login({onLogin}){
- const[email,Eml]=useState(''),[password,Pwd]=useState(''),[err,E]=useState(''),[busy,B]=useState(false);
- async function submit(e){e.preventDefault();B(true);E('');try{
+ const[email,Eml]=useState(''),[password,Pwd]=useState(''),[err,E]=useState(''),[busy,B]=useState(false),[visible,V]=useState(false);
+ const submitting=React.useRef(false);
+ async function submit(e){e.preventDefault();if(submitting.current)return;submitting.current=true;B(true);E('');try{
   const x=await request('/auth/admin/login',{method:'POST',body:JSON.stringify({email,password})});
   if(!['manager','super_admin'].includes(x.user.role))throw Error('Management account required');onLogin(x)
- }catch(ex){E(ex.message)}finally{B(false)}}
+ }catch(ex){E(ex.status===401?'Incorrect email or password. Please try again.':ex.status===403?'This account is not authorized for management access.':ex.status===429?'Too many attempts. Please try again later.':ex.status===422?'Please check your email and password.':ex.message)}finally{submitting.current=false;B(false)}}
  return <div className="login-wrap"><div className="login-panel"><img src="/login-product-logo.png" className="login-logo" alt="KRIYA360"/><div className="eyebrow">OPERATIONS MANAGEMENT PLATFORM</div><h1>Everything in motion.<br/><span>Everything under control.</span></h1><p>Manage on-field teams with real-time visibility, attendance and delivery tracking.</p><div className="login-benefits"><div><MapPinned/> Real-time fleet visibility</div><div><ShieldCheck/> Verified delivery proofs</div><div><Activity/> Actionable operations insights</div></div></div>
  <form onSubmit={submit} className="login-form"><div className="circle-icon"><LockKeyhole/></div><h2>Welcome back</h2><p>Sign in with your management email and password</p>
- <label>Admin email<input type="email" autoComplete="username" required value={email} onChange={e=>Eml(e.target.value)}/></label>
- <label>Password<input type="password" autoComplete="current-password" required value={password} onChange={e=>Pwd(e.target.value)}/></label>
- {err&&<div className="error" role="alert">{err}</div>}<button className="btn primary" disabled={busy}>{busy?'Please wait…':'Sign in to Dashboard'} <ArrowRight size={18}/></button>
+ <label>Admin email<input type="email" autoComplete="username" required value={email} disabled={busy} onChange={e=>Eml(e.target.value)}/></label>
+ <label>Password<span className="login-password"><input type={visible?"text":"password"} autoComplete="current-password" required value={password} onChange={e=>Pwd(e.target.value)} disabled={busy}/><button type="button" className="password-toggle" aria-label={visible?"Hide password":"Show password"} aria-pressed={visible} onClick={()=>V(v=>!v)}>{visible?<EyeOff size={20}/>:<Eye size={20}/>}</button></span></label>
+ {err&&<div className="error login-error" role="alert"><AlertTriangle size={18}/><span>{err}</span></div>}<button className="btn primary" disabled={busy} aria-busy={busy}>{busy?<><LoaderCircle className="login-spinner" size={19}/> Signing in…</>:<>Sign in to Dashboard <ArrowRight size={18}/></>}</button>
 </form></div>
 }
 function DriverOperationsSummary({drivers=[],tasks=[]}){
@@ -494,7 +496,7 @@ function DriverEditDialog({selection,onClose,onSave}){
 }
 function EvidenceDialog({item,token,onClose,onReviewed}){
  const[url,U]=useState(null),[error,E]=useState(''),[busy,B]=useState(false);
- useEffect(()=>{let active=true,link=null;fetch(item.url,{headers:{Authorization:'Bearer '+token}}).then(r=>{if(!r.ok)throw new Error('Unable to open authorized evidence');return r.blob()}).then(b=>{link=URL.createObjectURL(b);if(active)U(link)}).catch(e=>{if(active)E(e.message)});return()=>{active=false;if(link)URL.revokeObjectURL(link)}},[item.url,token]);
+ useEffect(()=>{let active=true,link=null;apiFetch(apiAsset(item.url),{headers:{Authorization:'Bearer '+token}}).then(r=>{if(!r.ok)throw new Error('Unable to open authorized evidence');return r.blob()}).then(b=>{link=URL.createObjectURL(b);if(active)U(link)}).catch(e=>{if(active)E(e.message)});return()=>{active=false;if(link)URL.revokeObjectURL(link)}},[item.url,token]);
  return <div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}} role="dialog" aria-modal="true"><div className="modal evidence-dialog"><div className="modal-heading"><h2>{item.title}</h2><button className="icon-btn" onClick={onClose}><X/></button></div>{error&&<p className="fraud-flags">{error}</p>}{url?<img className="evidence-image" alt="Authorized submitted evidence" src={url}/>:!error&&<p>Loading evidence securely...</p>}{item.faceDriver&&<div className="evidence-details"><p><b>Face-photo review:</b> {item.faceDriver.face_review_status||'pending'}</p><p>This confirms that management visually reviewed the uploaded photo. It is NOT biometric face matching or identity verification.</p>{item.faceDriver.face_review_note&&<small>{item.faceDriver.face_review_note}</small>}{item.faceDriver.face_review_status!=='approved'&&<div className="modal-footer"><button className="btn secondary" disabled={!url||busy} onClick={async()=>{B(true);try{await onReviewed(false)}finally{B(false)}}}>Reject / request new photo</button><button className="btn primary" disabled={!url||busy} onClick={async()=>{B(true);try{await onReviewed(true)}finally{B(false)}}}>Mark photo reviewed</button></div>}</div>}{item.expense&&<><div className="evidence-details"><b>Amount: {money(item.expense.amount)}</b><p>Category: {capital(item.expense.category)} • Submitted: {dt(item.expense.created_at)}</p>{(item.expense.fraud_flags||[]).map((f,i)=><p className="fraud-flags" key={i}><AlertTriangle size={15}/>{f}</p>)}<small>Flags are heuristic risk indicators, not proof of fraud. Check the actual receipt against the amount and payment.</small></div><button className="btn primary" disabled={!url||busy} onClick={async()=>{B(true);await onReviewed();B(false)}}><ShieldCheck size={16}/> Mark evidence reviewed</button></>}</div></div>
 }
 function RouteFit({positions}){const map=useMap();useEffect(()=>{if(positions.length>1){map.fitBounds(L.latLngBounds(positions),{padding:[25,25]});setTimeout(()=>map.invalidateSize(),100)}},[map,positions]);return null}

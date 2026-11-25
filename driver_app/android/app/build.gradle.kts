@@ -16,6 +16,7 @@ android {
     }
 
     defaultConfig {
+        manifestPlaceholders["KRIYA_GOOGLE_ANDROID_MAPS_KEY"] = System.getenv("KRIYA_GOOGLE_ANDROID_MAPS_KEY") ?: ""
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.example.kriya360_driver"
         // You can update the following values to match your application needs.

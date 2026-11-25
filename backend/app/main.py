@@ -158,7 +158,7 @@ def license_upload_locked(u):
 def safe_user(u):return {'id':u.id,'role':u.role,'name':u.name,'phone':u.phone,'email':u.email if u.role in ('manager','super_admin') else None,'language':u.language,'license_no':u.license_no,'vehicle':u.vehicle,'vehicle_plate':u.vehicle_plate,'face_enrolled':bool(u.face_path),'face_review_status':('approved' if u.face_review_status=='approved' else 'rejected' if u.face_review_status=='rejected' else 'pending' if u.face_path else 'not_submitted'),'face_review_note':u.face_review_note or '', 'face_url':'/api/files/'+Path(u.face_path).name if u.face_path else None,'license_url':'/api/files/'+Path(u.license_path).name if u.license_path else None,'approved':u.approved,'active':u.active is not False,'license_verified':bool(u.license_verified),'license_review_note':u.license_review_note or '','license_status':license_status(u),'license_inspected_at':iso(u.license_inspected_at),'on_shift':bool(u.shift_start and (not u.shift_end or naive(u.shift_start)>naive(u.shift_end))),'lat':u.lat,'lng':u.lng,'last_gps':iso(u.last_gps),'shift_expected':u.shift_expected,'shift_end_expected':u.shift_end_expected,'pin_change_required':bool(u.pin_change_required)}
 def task_json(t,s):
  d=s.get(User,t.driver_id) if t.driver_id else None
- return {'id':t.id,'title':t.title,'address':t.address,'lat':t.lat,'lng':t.lng,'driver_id':t.driver_id,'driver_name':d.name if d else None,'status':t.status,'queue_state':('waiting' if t.status==QUEUE_WAITING else 'accept_required' if t.status==QUEUE_READY else 'active' if t.status=='in_progress' else 'accepted' if t.status=='assigned' else t.status),'priority':t.priority,'customer':t.customer,'customer_phone':t.customer_phone,'instructions':t.instructions,'due_at':iso(t.due_at),'assigned_at':iso(t.assigned_at),'started_at':iso(t.started_at),'completed_at':iso(t.completed_at),'proof_url':('/api/files/'+Path(t.proof_path).name) if t.proof_path else None,'otp_verified':t.otp_verified,'route_distance_km':t.route_distance_km,'route_duration_min':t.route_duration_min,'route_source':t.route_source,'route_available':bool(t.route_json and (t.route_source or '').startswith(('OSRM','TomTom'))),'route_deviation':t.route_deviation,'late_reason':t.late_reason or '','late_reason_at':iso(t.late_reason_at)}
+ return {'id':t.id,'title':t.title,'address':t.address,'lat':t.lat,'lng':t.lng,'driver_id':t.driver_id,'driver_name':d.name if d else None,'status':t.status,'queue_state':('waiting' if t.status==QUEUE_WAITING else 'accept_required' if t.status==QUEUE_READY else 'active' if t.status=='in_progress' else 'accepted' if t.status=='assigned' else t.status),'priority':t.priority,'customer':t.customer,'customer_phone':t.customer_phone,'instructions':t.instructions,'due_at':iso(t.due_at),'assigned_at':iso(t.assigned_at),'started_at':iso(t.started_at),'completed_at':iso(t.completed_at),'proof_url':('/api/files/'+Path(t.proof_path).name) if t.proof_path else None,'otp_verified':t.otp_verified,'route_distance_km':t.route_distance_km,'route_duration_min':t.route_duration_min,'route_source':t.route_source,'route_available':bool(t.route_json and (t.route_source or '').startswith(('OSRM','TomTom','Google Routes'))),'route_deviation':t.route_deviation,'late_reason':t.late_reason or '','late_reason_at':iso(t.late_reason_at)}
 def expense_json(e,s):
  u=s.get(User,e.driver_id)
  return {'id':e.id,'driver_id':e.driver_id,'driver_name':u.name if u else '', 'task_id':e.task_id,'category':e.category,'amount':e.amount,'note':e.note,'status':e.status,'created_at':iso(e.created_at),'receipt_url':'/api/files/'+Path(e.receipt_path).name if e.receipt_path else None,'fraud_flags':__import__('json').loads(e.fraud_flags or '[]'),'evidence_reviewed':bool(e.evidence_reviewed),'reviewed_at':iso(e.reviewed_at)}
@@ -183,6 +183,70 @@ def line_distance_km(lat,lng,coordinates):
   dx=bx-ax;dy=by-ay;z=max(0,min(1,((x-ax)*dx+(y-ay)*dy)/(dx*dx+dy*dy))) if dx*dx+dy*dy else 0
   dist=min(dist,math.hypot(x-(ax+z*dx),y-(ay+z*dy)))
  return dist/1000
+# GOOGLE MAPS MIGRATION: opt-in provider. Existing endpoint response shapes stay unchanged.
+def google_maps_enabled():
+ return os.getenv('KRIYA_MAP_PROVIDER','').strip().lower()=='google'
+
+def google_maps_key():
+ key=os.getenv('GOOGLE_MAPS_SERVER_API_KEY','').strip()
+ if not key:err(503,'Google Maps backend key is not configured')
+ return key
+
+def google_decode_polyline(encoded):
+ """Decode Google's encoded polyline into existing [lng, lat] route geometry."""
+ result=[];index=0;lat=lng=0
+ while index<len(encoded):
+  pair=[]
+  for _ in range(2):
+   shift=value=0
+   while True:
+    if index>=len(encoded):raise ValueError('Invalid encoded polyline')
+    code=ord(encoded[index])-63;index+=1
+    value|=(code&0x1f)<<shift;shift+=5
+    if code<0x20:break
+   pair.append((value>>1)^(-(value&1)))
+  lat+=pair[0];lng+=pair[1]
+  result.append([round(lng/1e5,6),round(lat/1e5,6)])
+ return result
+
+async def google_route(a,b,c,d,mode='fastest'):
+ key=google_maps_key()
+ payload={'origin':{'location':{'latLng':{'latitude':a,'longitude':b}}},
+          'destination':{'location':{'latLng':{'latitude':c,'longitude':d}}},
+          'travelMode':'DRIVE','routingPreference':'TRAFFIC_AWARE',
+          'computeAlternativeRoutes':True,'polylineQuality':'HIGH_QUALITY',
+          'languageCode':'en-IN','units':'METRIC'}
+ headers={'X-Goog-Api-Key':key,'Content-Type':'application/json',
+          'X-Goog-FieldMask':'routes.distanceMeters,routes.duration,routes.staticDuration,routes.polyline.encodedPolyline,routes.description'}
+ try:
+  async with httpx.AsyncClient(timeout=16) as client:
+   response=await client.post('https://routes.googleapis.com/directions/v2:computeRoutes',json=payload,headers=headers)
+   response.raise_for_status()
+   candidates=response.json().get('routes') or []
+ except (httpx.HTTPError,ValueError) as e:
+  err(502,'Google Routes API unavailable or rejected this request')
+ if not candidates:err(503,'Google Routes returned no drivable route')
+ def seconds(value):return float(str(value).removesuffix('s'))
+ def convert(item):
+  coords=google_decode_polyline(item['polyline']['encodedPolyline'])
+  if len(coords)<2:raise ValueError('Google Routes supplied insufficient geometry')
+  duration=seconds(item['duration'])
+  static=seconds(item.get('staticDuration',item['duration']))
+  return {'distance_km':round(item['distanceMeters']/1000,2),
+          'duration_min':round(duration/60,1),
+          'traffic_delay_min':round(max(0,duration-static)/60,1),
+          'coordinates':coords,'steps':[],
+          'source':'Google Routes traffic-aware', 'traffic_aware':True}
+ try:routes=[convert(item) for item in candidates]
+ except (KeyError,TypeError,ValueError,IndexError):err(502,'Google Routes response missing required route data')
+ # Google does not promise a globally shortest route. Choose shortest of returned alternatives.
+ if mode=='shortest':routes.sort(key=lambda r:r['distance_km'])
+ primary=routes[0]
+ primary.update({'alternative_routes':routes[1:], 'requested_mode':mode,
+                 'shortest_guaranteed':False,
+                 'notice':('Shortest among routes returned by Google; not a globally shortest-path guarantee' if mode=='shortest' else 'Traffic-aware ETA is an estimate')})
+ return primary
+
 async def tomtom_route(a,b,c,d,route_type='fastest'):
  """Opt-in traffic-aware road routing; requires TOMTOM_API_KEY and provider terms."""
  key=os.getenv('TOMTOM_API_KEY','').strip()
@@ -211,6 +275,7 @@ async def tomtom_route(a,b,c,d,route_type='fastest'):
 
 async def route_options(a,b,c,d,mode='fastest'):
  if mode not in ('fastest','shortest'):err(422,'mode must be fastest or shortest')
+ if google_maps_enabled():return await google_route(a,b,c,d,mode)
  if os.getenv('TOMTOM_API_KEY','').strip():
   try:return await tomtom_route(a,b,c,d,mode)
   except (httpx.HTTPError,ValueError,KeyError,TypeError):
@@ -617,7 +682,7 @@ def driver_notifications(u=Depends(driver),s:Session=Depends(db)):
   if t.due_at:
    minutes=(naive(t.due_at)-naive(current)).total_seconds()/60
    if -1440<minutes<=0:items.append({'id':'late-'+t.id,'type':'deadline_missed','title':'Delivery overdue','message':t.title,'at':iso(t.due_at),'task_id':t.id})
-   elif minutes<=15:items.append({'id':'deadline-'+t.id,'type':'deadline_warning','title':'Delivery deadline approaching','message':f'{t.title} due in {max(1,int(minutes))} min','at':iso(t.due_at),'task_id':t.id})
+   elif 0<minutes<=15:items.append({'id':'deadline-'+t.id,'type':'deadline_warning','title':'Delivery deadline approaching','message':f'{t.title} due in {max(1,int(minutes))} min','at':iso(t.due_at),'task_id':t.id})
    if t.status=='in_progress' and u.lat is not None and u.lng is not None:
     eta=haversine(u.lat,u.lng,t.lat,t.lng)/25*60
     if minutes>0 and eta>minutes:items.append({'id':'predicted-'+t.id,'type':'predicted_delay','title':'Delivery may be late','message':f'{t.title}: ETA exceeds remaining time','at':iso(current),'task_id':t.id})
@@ -724,7 +789,7 @@ def gps(x:Coords,u=Depends(driver),s:Session=Depends(db)):
  accurate=x.accuracy_m is not None and x.accuracy_m<=60
  if fresh and accurate and newer:
   for t in s.scalars(select(Task).where(Task.driver_id==u.id,Task.status=='in_progress')):
-   if not t.route_json or not (t.route_source or '').startswith(('OSRM','TomTom')):continue
+   if not t.route_json or not (t.route_source or '').startswith(('OSRM','TomTom','Google Routes')):continue
    try:
     permitted=[json.loads(t.route_json)]+json.loads(t.route_alternatives_json or '[]')
     distance_m=1000*min(line_distance_km(x.lat,x.lng,path) for path in permitted if len(path)>1)
@@ -960,10 +1025,44 @@ _geocode_last_at=0.0
 # Resolve display names without exposing location-service credentials to browsers.
 # Only reverse geocode explicitly selected fleet positions (not every poll).
 _reverse_names_cache={}
+async def google_reverse_geocode(lat,lng):
+ key=google_maps_key()
+ try:
+  async with httpx.AsyncClient(timeout=12) as client:
+   response=await client.get('https://maps.googleapis.com/maps/api/geocode/json',params={'latlng':f'{lat},{lng}','key':key})
+   response.raise_for_status()
+   data=response.json()
+ except (httpx.HTTPError,ValueError):err(502,'Google reverse geocoding unavailable')
+ if data.get('status') not in ('OK','ZERO_RESULTS'):err(502,'Google Geocoding rejected the request')
+ name=next((x.get('formatted_address') for x in data.get('results',[]) if x.get('formatted_address')),None)
+ return {'name':name,'available':bool(name)}
+
+async def google_search_places(q):
+ key=google_maps_key()
+ try:
+  async with httpx.AsyncClient(timeout=12) as client:
+   response=await client.post('https://places.googleapis.com/v1/places:searchText',
+    headers={'X-Goog-Api-Key':key,'X-Goog-FieldMask':'places.displayName,places.formattedAddress,places.location,places.id'},
+    json={'textQuery':q,'maxResultCount':10,'languageCode':'en'})
+   response.raise_for_status()
+   data=response.json()
+ except (httpx.HTTPError,ValueError):err(502,'Google Places search unavailable')
+ results=[]
+ for place in data.get('places',[]):
+  loc=place.get('location') or {}
+  if loc.get('latitude') is None or loc.get('longitude') is None:continue
+  name=(place.get('displayName') or {}).get('text','')
+  address=place.get('formattedAddress','')
+  label=', '.join(v for v in (name,address) if v)[:240]
+  if label:results.append({'label':label,'lat':float(loc['latitude']),
+                           'lng':float(loc['longitude']),'type':'place'})
+ return {'results':results}
+
 @app.get('/api/geocode/reverse')
 async def reverse_geocode(lat:float,lng:float,_=Depends(manager)):
  if not (-90<=lat<=90 and -180<=lng<=180) or not (math.isfinite(lat) and math.isfinite(lng)):
   err(422,'Invalid coordinates')
+ if google_maps_enabled():return await google_reverse_geocode(lat,lng)
  key=os.getenv('GEOAPIFY_API_KEY','').strip()
  if not key:return {'name':None,'available':False}
  cache_key=(round(lat,4),round(lng,4))
@@ -988,6 +1087,7 @@ async def geocode_search(q:str, _=Depends(manager)):
  global _geocode_last_at
  q=q.strip()
  if len(q)<3 or len(q)>150:err(422,'Enter a location of 3-150 characters')
+ if google_maps_enabled():return await google_search_places(q)
  cache_key=q.casefold()
  if cache_key in _geocode_cache:return {'results':_geocode_cache[cache_key]}
  if time.monotonic()-_geocode_last_at<0.4:err(429,'Search rate limit: try again shortly')
@@ -1244,7 +1344,7 @@ async def import_commit(file:UploadFile=File(...),s:Session=Depends(db),_=Depend
 @app.get('/api/routing/emergency')
 async def emergency_route(from_lat:float,from_lng:float,to_lat:float,to_lng:float,_=Depends(manager)):
  if not (-90<=from_lat<=90 and -90<=to_lat<=90 and -180<=from_lng<=180 and -180<=to_lng<=180):err(422,'Invalid coordinates')
- return await route_between(from_lat,from_lng,to_lat,to_lng)
+ return await route_options(from_lat,from_lng,to_lat,to_lng)
 
 @app.get('/api/reports/attendance.pdf')
 def attendance_pdf(driver_id:Optional[str]=None,start:Optional[str]=None,end:Optional[str]=None,s:Session=Depends(db),_=Depends(manager)):
@@ -1390,14 +1490,52 @@ def driver_recommendations(order,s):
  candidates.sort(key=lambda x:(x['score'],x['name']))
  return candidates[:10]
 
+async def google_rank_by_drive_time(candidates,order):
+ """Optional, manager-triggered Google route matrix. Never called by GPS polling."""
+ eligible=[x for x in candidates if x['lat'] is not None and x['lng'] is not None][:10]
+ if not eligible:return candidates,False
+ key=google_maps_key()
+ payload={'origins':[{'waypoint':{'location':{'latLng':{'latitude':x['lat'],'longitude':x['lng']}}}} for x in eligible],
+          'destinations':[{'waypoint':{'location':{'latLng':{'latitude':order.pickup_lat,'longitude':order.pickup_lng}}}}],
+          'travelMode':'DRIVE','routingPreference':'TRAFFIC_AWARE'}
+ try:
+  async with httpx.AsyncClient(timeout=18) as client:
+   response=await client.post('https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix',json=payload,
+    headers={'X-Goog-Api-Key':key,'Content-Type':'application/json',
+             'X-Goog-FieldMask':'originIndex,destinationIndex,status,condition,distanceMeters,duration'})
+   response.raise_for_status()
+   results=response.json()
+ except (httpx.HTTPError,ValueError):err(502,'Google Route Matrix unavailable; ranking not changed')
+ if not isinstance(results,list):err(502,'Google Route Matrix returned an invalid response')
+ for row in results:
+  if row.get('condition')!='ROUTE_EXISTS':continue
+  index=row.get('originIndex')
+  if not isinstance(index,int) or index<0 or index>=len(eligible):continue
+  item=eligible[index]
+  try:
+   seconds=float(str(row['duration']).removesuffix('s'))
+   km=float(row['distanceMeters'])/1000
+  except (TypeError,KeyError,ValueError):continue
+  item['road_eta_min']=round(seconds/60,1)
+  item['distance_to_pickup_km']=round(km,2)
+  item['distance_type']='google_traffic_aware_road'
+  item['score']=round((0 if item['on_shift'] else 100)+(0 if item['gps_fresh'] else 40)+seconds/60+item['queued_tasks']*15+(20 if item['active_task'] else 0),2)
+  item['reasons'].append('Google traffic-aware road ETA')
+ candidates.sort(key=lambda x:(x['score'],x['name']))
+ return candidates,True
+
 @app.get('/api/orders/{order_id}/recommendations')
-def recommend_order(order_id:str,s:Session=Depends(db),_=Depends(manager)):
+async def recommend_order(order_id:str,s:Session=Depends(db),_=Depends(manager)):
  o=s.get(UnassignedOrder,order_id)
  if not o:err(404,'Order not found')
  if o.status!='unassigned':err(409,'Order already assigned')
- return {'order_id':o.id,'recommendations':driver_recommendations(o,s)[:3],
-         'ranking_method':'heuristic: shift, GPS freshness, pickup straight-line distance, current and queued tasks',
-         'traffic_aware':False}
+ candidates=driver_recommendations(o,s)
+ traffic=False
+ if google_maps_enabled() and os.getenv('KRIYA_GOOGLE_MATRIX_ENABLED','false').lower()=='true':
+  candidates,traffic=await google_rank_by_drive_time(candidates,o)
+ return {'order_id':o.id,'recommendations':candidates[:3],
+         'ranking_method':('heuristic: shift, GPS freshness, Google road ETA and queued tasks' if traffic else 'heuristic: shift, GPS freshness, pickup straight-line distance, current and queued tasks'),
+         'traffic_aware':traffic}
 
 @app.post('/api/orders/{order_id}/assign',status_code=201)
 def assign_order(order_id:str,x:OrderDriverAssignment,s:Session=Depends(db),u=Depends(manager)):

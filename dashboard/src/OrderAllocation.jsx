@@ -1,5 +1,6 @@
+import {API,apiFetch} from './apiConfig.js';
 import React, {useEffect,useState} from 'react';
-import {MapContainer,Marker,Popup,TileLayer} from 'react-leaflet';
+import {MapContainer,Marker,Popup,TileLayer} from './mapProvider.jsx';
 import L from 'leaflet';
 import {FileUp,MapPin,Package,CheckCircle2,AlertTriangle} from 'lucide-react';
 
@@ -7,7 +8,7 @@ const pin=new L.Icon({iconUrl:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.
 const COLUMNS=['order_reference','title','pickup_address','pickup_lat','pickup_lng','delivery_address','delivery_lat','delivery_lng','customer_name','customer_phone','due_at','priority','vehicle_type','instructions'];
 const required=COLUMNS.slice(0,12);
 async function api(path,token,options={}){
- const res=await fetch('/api'+path,{...options,headers:{'Content-Type':'application/json',Authorization:'Bearer '+token,...(options.headers||{})}});
+ const res=await apiFetch(API+path,{...options,headers:{'Content-Type':'application/json',Authorization:'Bearer '+token,...(options.headers||{})}});
  const result=await res.json().catch(()=>({}));
  if(!res.ok)throw Error(typeof result.detail==='string'?result.detail:'Request failed ('+res.status+')');
  return result;

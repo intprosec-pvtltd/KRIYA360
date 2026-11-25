@@ -1,10 +1,11 @@
+import {API,apiFetch} from './apiConfig.js';
 import React,{useState,useEffect} from 'react';
 import {createPortal} from 'react-dom';
-import {MapContainer,TileLayer,Marker,Popup,Polyline,useMap} from 'react-leaflet';
+import {MapContainer,TileLayer,Marker,Popup,Polyline,useMap,GOOGLE_MAPS_ACTIVE} from './mapProvider.jsx';
 import L from 'leaflet';
 const pin=new L.Icon({iconUrl:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',shadowUrl:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',iconSize:[25,41],iconAnchor:[12,41]});
-const base='/api';
-async function api(path,token,options={}){const res=await fetch(base+path,{...options,headers:{...(token?{Authorization:`Bearer ${token}`}:{}) ,...(options.headers||{})}});if(!res.ok){let v={};try{v=await res.json()}catch{}throw Error(v.detail||`HTTP ${res.status}`)}return res}
+const base=API;
+async function api(path,token,options={}){const res=await apiFetch(base+path,{...options,headers:{...(token?{Authorization:`Bearer ${token}`}:{}) ,...(options.headers||{})}});if(!res.ok){let v={};try{v=await res.json()}catch{}throw Error(v.detail||`HTTP ${res.status}`)}return res}
 function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000)}
 function dateISO(dt){return dt?new Date(dt).toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'}):'—'}
 
@@ -37,7 +38,7 @@ export function BulkDriverImport({token,onImported}){
  </section>;
 }
 
-export function LayerTiles({controls=true}){const [mode,M]=useState('standard');const map=useMap();const base=mode==='standard'?'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png':mode==='dark'?'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png':mode==='terrain'?'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png':'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';return <><TileLayer key={mode} attribution={mode==='standard'?'© OpenStreetMap contributors':mode==='dark'?'© OpenStreetMap © CARTO':mode==='terrain'?'© OpenTopoMap contributors, SRTM':'Tiles © Esri and contributors'} url={base}/>{mode==='hybrid'&&<TileLayer opacity={0.60} attribution="© OpenStreetMap contributors" url="https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"/>}{controls&&<div className="next-map-mode" onMouseDown={e=>L.DomEvent.stopPropagation(e.nativeEvent)} onClick={e=>L.DomEvent.stopPropagation(e.nativeEvent)}><label>Map view <select value={mode} onChange={e=>M(e.target.value)}><option value="standard">Standard</option><option value="satellite">Satellite</option><option value="dark">Dark</option><option value="terrain">Terrain</option><option value="hybrid">Hybrid overlay</option></select></label></div>}</>}
+export function LayerTiles({controls=true}){const [mode,M]=useState('standard');const map=useMap();useEffect(()=>{if(GOOGLE_MAPS_ACTIVE&&map?.native){const type=mode==='standard'?'roadmap':mode==='dark'?'roadmap':mode;map.native.setMapTypeId(type)}},[map,mode]);const base=mode==='standard'?'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png':mode==='dark'?'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png':mode==='terrain'?'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png':'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';return <><TileLayer key={mode} attribution={mode==='standard'?'© OpenStreetMap contributors':mode==='dark'?'© OpenStreetMap © CARTO':mode==='terrain'?'© OpenTopoMap contributors, SRTM':'Tiles © Esri and contributors'} url={base}/>{mode==='hybrid'&&<TileLayer opacity={0.60} attribution="© OpenStreetMap contributors" url="https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"/>}{controls&&<div className="next-map-mode" onMouseDown={e=>L.DomEvent.stopPropagation(e.nativeEvent)} onClick={e=>L.DomEvent.stopPropagation(e.nativeEvent)}><label>Map view <select value={mode} onChange={e=>M(e.target.value)}><option value="standard">Standard</option><option value="satellite">Satellite</option><option value="dark">Dark</option><option value="terrain">Terrain</option><option value="hybrid">Hybrid overlay</option></select></label></div>}</>}
 
 export function SOSLocation({alert,token,onClose}){
  const [position,P]=useState(null),[route,R]=useState(null),[error,E]=useState('');const lat=Number(alert.lat),lng=Number(alert.lng);
