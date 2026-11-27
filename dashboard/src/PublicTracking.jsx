@@ -1,0 +1,10 @@
+import React,{useCallback,useEffect,useState} from 'react';
+import {API,apiFetch} from './apiConfig.js';
+import {Package,RefreshCcw,CheckCircle2,Truck} from 'lucide-react';
+const states={requested:'Pickup requested',accepted:'Driver accepted pickup',arrived:'Driver arrived at pickup',collected:'Package collected',in_transit:'Delivery in progress',completed:'Delivered',cancelled:'Pickup cancelled',rejected:'Pickup declined',expired:'Pickup request expired'};
+export default function PublicTracking({token}){
+ const [state,S]=useState(null),[loading,L]=useState(true),[error,E]=useState('');
+ const load=useCallback(async()=>{L(true);E('');try{const r=await apiFetch(API+'/marketplace/track/lookup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token})});const result=await r.json().catch(()=>({}));if(!r.ok)throw Error('Tracking link expired or unavailable. Ask the merchant for a new link.');S(result.state)}catch(e){E(e.message)}finally{L(false)}},[token]);
+ useEffect(()=>{load();const timer=setInterval(load,30000);return()=>clearInterval(timer)},[load]);
+ return <div style={{minHeight:'100vh',display:'grid',placeItems:'center',padding:20,background:'#f4f7fb'}}><section className="card" style={{width:'100%',maxWidth:480,padding:30,textAlign:'center'}}><img src="/logo-sidebar.png" alt="KRIYA360" style={{width:150,maxWidth:'100%',objectFit:'contain',background:'#081f45',borderRadius:12,padding:10}}/><p>DELIVERY TRACKING</p><div style={{color:'#f47a20',margin:16}}>{state==='completed'?<CheckCircle2 size={54}/>:state==='in_transit'?<Truck size={54}/>:<Package size={54}/>}</div><h2>{loading&&!state?'Checking status…':states[state]||'Status unavailable'}</h2>{error&&<p role="alert" style={{color:'#b91c1c'}}>{error}</p>}<p>Only delivery status is visible here. Contact your merchant for additional details.</p><button type="button" className="btn primary" disabled={loading} onClick={load}><RefreshCcw size={16}/> {loading?'Refreshing…':'Refresh status'}</button></section></div>;
+}

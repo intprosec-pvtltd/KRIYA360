@@ -608,6 +608,8 @@ def punch_in(x:Punch,u=Depends(driver),s:Session=Depends(db)):
  s.add(Attendance(id=str(uuid.uuid4()),driver_id=u.id,kind='in',at=now(),lat=x.lat,lng=x.lng,vehicle=u.last_vehicle,attendance_type=attendance_type,distance_from_office_m=office_distance,gps_accuracy_m=x.accuracy_m,verification_state='not_configured'));s.commit();return safe_user(u)
 @app.post('/api/attendance/punch-out')
 def punch_out(x:Punch,u=Depends(driver),s:Session=Depends(db)):
+ s.scalar(select(User).where(User.id==u.id).with_for_update())
+ if marketplace.pickup_reserved(s,u.id):err(409,'Complete or cancel the accepted merchant pickup before punching out')
  attendance_type,office_distance=classify_attendance(x,s)
  if not u.shift_start or (u.shift_end and naive(u.shift_end)>naive(u.shift_start)):err(409,'Not punched in')
  u.shift_end=now();u.lat=x.lat;u.lng=x.lng;u.last_gps=now();u.last_gps_received_at=now();s.add(Attendance(id=str(uuid.uuid4()),driver_id=u.id,kind='out',at=now(),lat=x.lat,lng=x.lng,vehicle=x.vehicle or u.last_vehicle,attendance_type=attendance_type,distance_from_office_m=office_distance,gps_accuracy_m=x.accuracy_m,verification_state='not_configured'));s.commit();return safe_user(u)
@@ -616,8 +618,9 @@ def attendance(s:Session=Depends(db),_=Depends(manager)):
  return [{'id':a.id,'driver_id':a.driver_id,'kind':a.kind,'at':iso(a.at),'lat':a.lat,'lng':a.lng,'vehicle':a.vehicle,'attendance_type':a.attendance_type,'distance_from_office_m':a.distance_from_office_m,'gps_accuracy_m':a.gps_accuracy_m,'verification_state':a.verification_state} for a in s.scalars(select(Attendance).order_by(Attendance.at.desc()).limit(300))]
 @app.post('/api/tasks')
 async def create_task(x:TaskCreate,s:Session=Depends(db),_=Depends(manager)):
- u=s.get(User,x.driver_id)
+ u=s.scalar(select(User).where(User.id==x.driver_id).with_for_update())
  if not u or u.role!='driver':err(404,'Driver not found')
+ if marketplace.pickup_reserved(s,u.id):err(409,'Driver has an accepted merchant pickup')
  if not u.approved or not u.license_verified or u.active is False:err(409,'Driver must be active with manager-verified licence before assignment')
  recipient_phone(x.customer_phone)
  if not -90<=x.lat<=90 or not -180<=x.lng<=180:err(400,'Invalid destination coordinates')
@@ -637,6 +640,7 @@ def bulk_delivery_preview(x:BulkDeliveryRequest,s:Session=Depends(db),_=Depends(
   elif d.active is False:issues.append('Driver account is deactivated')
   elif not d.approved:issues.append('Driver is pending management approval')
   elif not d.license_verified:issues.append('Driver licence has not been verified')
+  elif marketplace.pickup_reserved(s,d.id):issues.append('Driver has an accepted merchant pickup')
   if not task.title.strip() or not task.address.strip():issues.append('Title and destination required')
   if not -90<=task.lat<=90 or not -180<=task.lng<=180:issues.append('Invalid coordinates')
   if not re.fullmatch(r'(?:[6-9][0-9]{9}|91[6-9][0-9]{9}|\+91[6-9][0-9]{9})',task.customer_phone or ''):issues.append('Recipient phone invalid')
@@ -645,6 +649,8 @@ def bulk_delivery_preview(x:BulkDeliveryRequest,s:Session=Depends(db),_=Depends(
 
 @app.post('/api/tasks/bulk-commit',status_code=201)
 def bulk_delivery_commit(x:BulkDeliveryRequest,s:Session=Depends(db),_=Depends(manager)):
+ for did in sorted({item.driver_id for item in x.deliveries}):
+  s.scalar(select(User).where(User.id==did).with_for_update())
  preview=bulk_delivery_preview(x,s,_)
  if preview['invalid']:err(422,'Batch contains invalid tasks; preview and correct every row')
  saved=[]
@@ -686,7 +692,7 @@ def driver_notifications(u=Depends(driver),s:Session=Depends(db)):
    if t.status=='in_progress' and u.lat is not None and u.lng is not None:
     eta=haversine(u.lat,u.lng,t.lat,t.lng)/25*60
     if minutes>0 and eta>minutes:items.append({'id':'predicted-'+t.id,'type':'predicted_delay','title':'Delivery may be late','message':f'{t.title}: ETA exceeds remaining time','at':iso(current),'task_id':t.id})
- return items
+ return items+marketplace.driver_alerts(s,u)
 
 @app.get('/api/tasks')
 def tasks(s:Session=Depends(db),u=Depends(require)):
@@ -1546,6 +1552,7 @@ def assign_order(order_id:str,x:OrderDriverAssignment,s:Session=Depends(db),u=De
  if o.status!='unassigned':err(409,'This order is already assigned')
  d=s.scalar(select(User).where(User.id==x.driver_id).with_for_update())
  if not d or not eligible_for_order(d,o):err(409,'Selected driver is not active, approved, licence-verified or vehicle-compatible')
+ if marketplace.pickup_reserved(s,d.id):err(409,'Driver has an accepted merchant pickup')
  existing=delivery_queue_state(s,d.id)
  # The first task keeps the existing assigned/start behavior. Additional tasks wait.
  secondary=any(t.status in ('assigned','in_progress',QUEUE_WAITING,QUEUE_READY) for t in existing)
@@ -1559,3 +1566,10 @@ def assign_order(order_id:str,x:OrderDriverAssignment,s:Session=Depends(db),u=De
  except Exception:
   s.rollback();err(409,'Assignment conflict. Refresh the order before retrying')
  return {'order':order_view(o),'task':task_json(t,s),'message':('Secondary delivery queued; driver accepts after current delivery' if secondary else 'Primary delivery assigned'),'secondary':secondary,'queue_state':t.status}
+
+
+# Merchant feature uses isolated auth and additive tables.
+from . import marketplace, shopify_marketplace
+Base.metadata.create_all(engine)
+app.include_router(marketplace.router)
+app.include_router(shopify_marketplace.router)

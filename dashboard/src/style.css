@@ -281,3 +281,17 @@ body:has(.sos-portal-backdrop) .sos-compact-toast{display:none!important}
 
 /* Accessible login states; retain existing responsive branding. */
 .login-password{display:block;position:relative;width:100%}.login-password input{width:100%;padding-right:48px!important}.login-form .password-toggle{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:transparent;border:0;color:#526783;display:grid;place-items:center;width:38px;height:38px;border-radius:8px}.password-toggle:focus-visible{outline:2px solid #226fc1}.login-form .login-error{display:flex;align-items:center;gap:9px}.login-error svg{flex-shrink:0}.login-spinner{animation:kriya-spin .85s linear infinite}@keyframes kriya-spin{to{transform:rotate(360deg)}}.login-form .btn:disabled{cursor:wait;opacity:.8}@media(prefers-reduced-motion:reduce){.login-spinner{animation:none}}
+
+/* Merchant review: dedicated responsive form and action footer. */
+.merchant-review-modal{width:min(100%,640px);max-height:calc(100dvh - 32px);overflow:auto;padding:28px!important;}
+.merchant-review-modal .modal-heading{margin-bottom:12px;gap:16px;}
+.merchant-review-modal p{margin:0 0 18px;color:#63758c;line-height:1.5;}
+.merchant-review-modal label{margin-bottom:8px;font-size:13px;}
+.merchant-review-modal textarea{font-size:14px;line-height:1.5;color:#193354;display:block;}
+.merchant-review-modal textarea:focus{outline:2px solid #f47a20;outline-offset:1px;}
+.merchant-review-help{display:flex;justify-content:space-between;font-size:12px;color:#63758c;margin-top:8px;}
+.merchant-review-modal .modal-footer{border-top:1px solid #e2e8f0;padding-top:18px;margin-top:20px;flex-wrap:wrap;}
+.merchant-review-modal .btn:disabled{opacity:.5;cursor:not-allowed;}
+.merchant-review-modal .merchant-review-error{color:#b91c1c;margin:12px 0 0;}
+.merchant-notice{padding:12px;color:#166534;}
+@media(max-width:480px){.merchant-review-modal{padding:18px!important}.merchant-review-modal .modal-footer>*{flex:1;justify-content:center;}}

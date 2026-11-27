@@ -14,6 +14,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'driver_notifications.dart';
+import 'marketplace.dart';
 
 const navy = Color(0xff081F45),
     orange = Color(0xffF47A20),
@@ -303,6 +304,7 @@ class _KriyaAppState extends State<KriyaApp> {
   String lang = 'en';
   bool loading = true;
   bool pending = false;
+  bool _driverSelected = false;
   String? restoreError;
   @override
   void initState() {
@@ -439,6 +441,7 @@ class _KriyaAppState extends State<KriyaApp> {
       token = null;
       user = null;
       pending = false;
+      _driverSelected = false;
     });
   }
 
@@ -447,7 +450,7 @@ class _KriyaAppState extends State<KriyaApp> {
     return MaterialApp(
         navigatorKey: kriyaNavigatorKey,
         debugShowCheckedModeBanner: false,
-        title: 'KRIYA360 Driver',
+        title: 'KRIYA360',
         supportedLocales: const [
           Locale('en'),
           Locale('hi'),
@@ -473,7 +476,7 @@ class _KriyaAppState extends State<KriyaApp> {
             : restoreError != null
                 ? Scaffold(body: Center(child: Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.cloud_off, size: 48, color: navy), const SizedBox(height: 16), Text(restoreError!, textAlign: TextAlign.center), const SizedBox(height: 16), FilledButton(onPressed: restore, child: const Text('Retry connection'))]))))
                 : token == null
-                ? LoginPage(onLogin: login)
+                ? (_driverSelected ? LoginPage(onLogin: login, onBack: () => setState(() => _driverSelected = false)) : RoleGateway(apiOrigin: apiUrl, onDriver: () => setState(() => _driverSelected = true)))
                 : pending
                     ? PendingDriverPage(
                         user: user!,
@@ -941,7 +944,8 @@ class _PinChangePageState extends State<PinChangePage> {
 
 class LoginPage extends StatefulWidget {
   final Future<void> Function(String, String) onLogin;
-  const LoginPage({super.key, required this.onLogin});
+  final VoidCallback? onBack;
+  const LoginPage({super.key, required this.onLogin, this.onBack});
   @override
   State<LoginPage> createState() => _LoginPageState();
 }
@@ -1028,6 +1032,7 @@ class _LoginPageState extends State<LoginPage> {
                                   style: TextStyle(
                                       color: Colors.blueGrey, fontSize: 12)),
                               const SizedBox(height: 38),
+                              if (widget.onBack != null) TextButton(onPressed: busy ? null : widget.onBack, child: const Text('Choose another account type')),
                               const BrandCompanyFooter(logoHeight: 42),
                               const SizedBox(height: 12)
                             ]))))));
@@ -1084,6 +1089,7 @@ class _DriverHomeState extends State<DriverHome> {
   String _scheduledSignature = '';
   bool busy = false;
   bool _refreshing = false;
+  bool _merchantPageOpen = false;
   String? _refreshError;
   bool trackingOnShift = false;
   bool _gpsStarting = false;
@@ -1104,11 +1110,11 @@ class _DriverHomeState extends State<DriverHome> {
     super.initState();
     trackingOnShift = widget.user['on_shift'] == true;
     restoreSeen();
-    DriverNotifications.onTap = () { if (mounted) setState(() => tab = 1); };
+    DriverNotifications.onTap = () { if (mounted) { if (marketplaceUiEnabled && (DriverNotifications.lastPayload ?? "").startsWith("merchant-pickup-")) { WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted) openMerchantPickups(); }); } else { setState(() => tab = 1); } } };
     DriverNotifications.initialize().then((_) {
       if (mounted && DriverNotifications.pendingTap) {
         DriverNotifications.pendingTap = false;
-        setState(() => tab = 1);
+        DriverNotifications.onTap?.call();
       }
     }).catchError((Object _) {});
     loadOfficePolicy();
@@ -1149,6 +1155,17 @@ class _DriverHomeState extends State<DriverHome> {
     seenNotifications.addAll(notifications.map((n) => '${n['id']}'));
     await prefs.setStringList('read_notifications', seenNotifications.toList());
     if (mounted) setState(() {});
+  }
+
+  Future<void> openMerchantPickups() async {
+    if (!mounted || !marketplaceUiEnabled || _merchantPageOpen) return;
+    _merchantPageOpen = true;
+    try {
+      await Navigator.of(context).push(MaterialPageRoute(builder: (_) => DriverMarketplace(api: (path, method, body) async {
+        try { return await api.call(path, method: method, json: body); } on ApiFailure catch (e) { throw MarketFailure(friendlyError(e), e.status); }
+      })));
+    } finally { _merchantPageOpen = false; }
+    if (mounted) await load();
   }
 
   Future<void> showNotifications() async {
@@ -1228,6 +1245,7 @@ class _DriverHomeState extends State<DriverHome> {
                                   final kind = '${n['type'] ?? ''}';
                                   Navigator.of(ctx).pop();
                                   if (!mounted) return;
+                                  if (kind == 'merchant_pickup') { openMerchantPickups(); return; }
                                   setState(() => tab =
                                       (kind == 'task_assignment' ||
                                               kind == 'secondary_ready' ||
@@ -1355,7 +1373,8 @@ class _DriverHomeState extends State<DriverHome> {
                 n['type'] == 'secondary_queued' ||
                 n['type'] == 'predicted_delay' ||
                 n['type'] == 'deadline_warning' ||
-                n['type'] == 'deadline_missed') {
+                n['type'] == 'deadline_missed' ||
+                (marketplaceUiEnabled && n['type'] == 'merchant_pickup')) {
               DriverNotifications.show(
                   key, '${n['title'] ?? ''}', n['type'] == 'deadline_warning' ? 'A delivery deadline is approaching. Open My Tasks for current details.' : '${n['message'] ?? ''}');
             }
@@ -2298,6 +2317,7 @@ class _DriverHomeState extends State<DriverHome> {
             ),
           ),
           const SizedBox(width: 6),
+          if (marketplaceUiEnabled) IconButton(tooltip: 'Merchant pickups', onPressed: openMerchantPickups, icon: const Icon(Icons.storefront_outlined, color: navy)),
           Stack(children: [
             IconButton(
                 tooltip: 'Notifications',

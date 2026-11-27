@@ -12,7 +12,8 @@ class DriverNotifications {
   static Future<void>? _initializing;
   static VoidCallback? onTap;
   static bool pendingTap = false;
-  static void _tap() { if (onTap != null) { onTap!(); } else { pendingTap = true; } }
+  static String? lastPayload;
+  static void _tap(String? payload) { lastPayload = payload; if (onTap != null) { onTap!(); } else { pendingTap = true; } }
   static final Set<String> _knownTasks = {};
 
   static const details = NotificationDetails(android: AndroidNotificationDetails(
@@ -32,9 +33,9 @@ class DriverNotifications {
     tzdata.initializeTimeZones();
     tz.setLocalLocation(tz.getLocation('Asia/Kolkata'));
     const android = AndroidInitializationSettings('ic_kriya_notification');
-    await plugin.initialize(const InitializationSettings(android: android), onDidReceiveNotificationResponse: (_) => _tap());
+    await plugin.initialize(const InitializationSettings(android: android), onDidReceiveNotificationResponse: (response) => _tap(response.payload));
     final launch = await plugin.getNotificationAppLaunchDetails();
-    if (launch?.didNotificationLaunchApp == true) _tap();
+    if (launch?.didNotificationLaunchApp == true) _tap(launch?.notificationResponse?.payload);
     await plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.requestNotificationsPermission();
     initialized = true;
     } finally { _initializing = null; }
@@ -47,7 +48,7 @@ class DriverNotifications {
   }
 
   static Future<void> show(String key,String title,String body) async {
-    try { await initialize(); await plugin.show(idOf(key),title,body,details); } catch (e) { debugPrint('KRIYA360 notification operation failed: ${e.runtimeType}'); }
+    try { await initialize(); await plugin.show(idOf(key),title,body,details,payload:key); } catch (e) { debugPrint('KRIYA360 notification operation failed: ${e.runtimeType}'); }
   }
 
   static Future<void> schedule(String key,String title,String body,DateTime at, {bool daily=false}) async {
@@ -58,7 +59,7 @@ class DriverNotifications {
       await plugin.zonedSchedule(idOf(key),title,body,when,details,
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
         uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-        matchDateTimeComponents: daily ? DateTimeComponents.time : null);
+        matchDateTimeComponents: daily ? DateTimeComponents.time : null,payload:key);
     } catch (e) { debugPrint('KRIYA360 notification operation failed: ${e.runtimeType}'); }
   }
 
@@ -82,7 +83,7 @@ class DriverNotifications {
   }
 
   static Future<void> clearReminders() async {
-    try { await initialize(); await plugin.cancelAll(); _knownTasks.clear(); pendingTap = false; } catch (e) { debugPrint('Notification cleanup failed: ${e.runtimeType}'); }
+    try { await initialize(); await plugin.cancelAll(); _knownTasks.clear(); pendingTap = false; lastPayload = null; } catch (e) { debugPrint('Notification cleanup failed: ${e.runtimeType}'); }
   }
   static Future<void> syncTasks(List tasks) async {
     final current = tasks.whereType<Map>().map((t) => '${t['id'] ?? ''}').where((id) => id.isNotEmpty).toSet();
